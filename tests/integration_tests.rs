@@ -11,13 +11,12 @@
 //! - Message passing through Redis channels
 //! - Task assignment and lifecycle management
 
-use tinytown::{
-    Agent, AgentId, AgentState, AgentType, Message,
-    Priority, Task, TaskId, TaskState, Town,
-};
-use tinytown::message::MessageType;
 use std::time::Duration;
 use tempfile::TempDir;
+use tinytown::message::MessageType;
+use tinytown::{
+    Agent, AgentId, AgentState, AgentType, Message, Priority, Task, TaskId, TaskState, Town,
+};
 
 /// Helper function to create a temporary town for testing.
 async fn create_test_town(name: &str) -> Result<(Town, TempDir), Box<dyn std::error::Error>> {
@@ -137,8 +136,6 @@ async fn test_agent_state_update() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
-
 // ============================================================================
 // MESSAGE PASSING THROUGH REDIS CHANNELS TESTS
 // ============================================================================
@@ -151,11 +148,7 @@ async fn test_message_send() -> Result<(), Box<dyn std::error::Error>> {
     let agent = town.spawn_agent("worker-1", "claude").await?;
     let agent_id = agent.id();
 
-    let msg = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::Ping,
-    );
+    let msg = Message::new(AgentId::supervisor(), agent_id, MessageType::Ping);
 
     town.channel().send(&msg).await?;
 
@@ -173,18 +166,11 @@ async fn test_message_receive() -> Result<(), Box<dyn std::error::Error>> {
     let agent = town.spawn_agent("worker-1", "claude").await?;
     let agent_id = agent.id();
 
-    let original_msg = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::Ping,
-    );
+    let original_msg = Message::new(AgentId::supervisor(), agent_id, MessageType::Ping);
     town.channel().send(&original_msg).await?;
 
     // Use try_receive instead of blocking receive
-    let received = town
-        .channel()
-        .try_receive(agent_id)
-        .await?;
+    let received = town.channel().try_receive(agent_id).await?;
 
     assert!(received.is_some());
     let msg = received.unwrap();
@@ -203,29 +189,17 @@ async fn test_message_priority() -> Result<(), Box<dyn std::error::Error>> {
     let agent = town.spawn_agent("worker-1", "claude").await?;
     let agent_id = agent.id();
 
-    let low_msg = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::Ping,
-    )
-    .with_priority(Priority::Low);
+    let low_msg = Message::new(AgentId::supervisor(), agent_id, MessageType::Ping)
+        .with_priority(Priority::Low);
 
-    let high_msg = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::Pong,
-    )
-    .with_priority(Priority::High);
+    let high_msg = Message::new(AgentId::supervisor(), agent_id, MessageType::Pong)
+        .with_priority(Priority::High);
 
     town.channel().send(&low_msg).await?;
     town.channel().send(&high_msg).await?;
 
     // High priority messages are pushed to front (lpush), so try_receive gets them first
-    let first = town
-        .channel()
-        .try_receive(agent_id)
-        .await?
-        .unwrap();
+    let first = town.channel().try_receive(agent_id).await?.unwrap();
 
     assert_eq!(first.id, high_msg.id);
 
@@ -243,11 +217,7 @@ async fn test_message_try_receive() -> Result<(), Box<dyn std::error::Error>> {
     let empty = town.channel().try_receive(agent_id).await?;
     assert!(empty.is_none());
 
-    let msg = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::Ping,
-    );
+    let msg = Message::new(AgentId::supervisor(), agent_id, MessageType::Ping);
     town.channel().send(&msg).await?;
 
     let received = town.channel().try_receive(agent_id).await?;
@@ -265,11 +235,7 @@ async fn test_message_correlation() -> Result<(), Box<dyn std::error::Error>> {
     let agent = town.spawn_agent("worker-1", "claude").await?;
     let agent_id = agent.id();
 
-    let request = Message::new(
-        AgentId::supervisor(),
-        agent_id,
-        MessageType::StatusRequest,
-    );
+    let request = Message::new(AgentId::supervisor(), agent_id, MessageType::StatusRequest);
     let request_id = request.id;
 
     let response = Message::new(
@@ -286,7 +252,6 @@ async fn test_message_correlation() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
 
 // ============================================================================
 // TASK ASSIGNMENT AND LIFECYCLE TESTS
@@ -402,8 +367,7 @@ async fn test_task_failure() -> Result<(), Box<dyn std::error::Error>> {
 /// Test that tasks can have tags for filtering.
 #[tokio::test]
 async fn test_task_tags() -> Result<(), Box<dyn std::error::Error>> {
-    let task = Task::new("Implement API endpoint")
-        .with_tags(vec!["backend", "api", "urgent"]);
+    let task = Task::new("Implement API endpoint").with_tags(vec!["backend", "api", "urgent"]);
 
     assert_eq!(task.tags.len(), 3);
     assert!(task.tags.contains(&"backend".to_string()));
@@ -446,7 +410,6 @@ async fn test_task_persistence() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-
 // ============================================================================
 // INTEGRATION TESTS - COMBINED WORKFLOWS
 // ============================================================================
@@ -466,9 +429,7 @@ async fn test_complete_workflow() -> Result<(), Box<dyn std::error::Error>> {
     assert!(stored_task.is_some());
     assert_eq!(stored_task.unwrap().state, TaskState::Assigned);
 
-    agent
-        .send(MessageType::StatusRequest)
-        .await?;
+    agent.send(MessageType::StatusRequest).await?;
 
     // assign() sends a TaskAssign message, and send() sends a StatusRequest message
     let inbox_len = agent.inbox_len().await?;
@@ -531,7 +492,10 @@ async fn test_task_lifecycle_with_agent() -> Result<(), Box<dyn std::error::Erro
     let completed = town.channel().get_task(task.id).await?;
     let completed_task = completed.unwrap();
     assert_eq!(completed_task.state, TaskState::Completed);
-    assert_eq!(completed_task.result, Some("Successfully completed".to_string()));
+    assert_eq!(
+        completed_task.result,
+        Some("Successfully completed".to_string())
+    );
 
     Ok(())
 }
@@ -559,21 +523,9 @@ async fn test_message_inbox_ordering() -> Result<(), Box<dyn std::error::Error>>
     let inbox_len = agent.inbox_len().await?;
     assert_eq!(inbox_len, 3);
 
-    let _msg1 = town
-        .channel()
-        .try_receive(agent_id)
-        .await?
-        .unwrap();
-    let _msg2 = town
-        .channel()
-        .try_receive(agent_id)
-        .await?
-        .unwrap();
-    let _msg3 = town
-        .channel()
-        .try_receive(agent_id)
-        .await?
-        .unwrap();
+    let _msg1 = town.channel().try_receive(agent_id).await?.unwrap();
+    let _msg2 = town.channel().try_receive(agent_id).await?.unwrap();
+    let _msg3 = town.channel().try_receive(agent_id).await?.unwrap();
 
     let final_len = agent.inbox_len().await?;
     assert_eq!(final_len, 0);
@@ -652,7 +604,6 @@ async fn test_message_receive_timeout() -> Result<(), Box<dyn std::error::Error>
     Ok(())
 }
 
-
 // ============================================================================
 // EDGE CASES AND STRESS TESTS
 // ============================================================================
@@ -704,13 +655,14 @@ async fn test_many_agents() -> Result<(), Box<dyn std::error::Error>> {
     let mut agent_ids = Vec::new();
 
     for i in 0..10 {
-        let agent = town
-            .spawn_agent(&format!("worker-{}", i), "claude")
-            .await?;
+        let agent = town.spawn_agent(&format!("worker-{}", i), "claude").await?;
         agent_ids.push(agent.id());
     }
 
-    let unique_count = agent_ids.iter().collect::<std::collections::HashSet<_>>().len();
+    let unique_count = agent_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     assert_eq!(unique_count, 10);
 
     Ok(())
@@ -731,7 +683,10 @@ async fn test_many_tasks() -> Result<(), Box<dyn std::error::Error>> {
         task_ids.push(task_id);
     }
 
-    let unique_count = task_ids.iter().collect::<std::collections::HashSet<_>>().len();
+    let unique_count = task_ids
+        .iter()
+        .collect::<std::collections::HashSet<_>>()
+        .len();
     assert_eq!(unique_count, 20);
 
     Ok(())

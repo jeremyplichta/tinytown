@@ -57,4 +57,3 @@ pub use error::{Error, Result};
 pub use message::{Message, MessageId, Priority};
 pub use task::{Task, TaskId, TaskState};
 pub use town::Town;
-
