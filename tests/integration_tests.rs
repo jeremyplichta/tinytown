@@ -76,9 +76,11 @@ async fn test_town_initialization() -> Result<(), Box<dyn std::error::Error>> {
     let town_path = temp_dir.path();
     let town = Town::init(town_path, "test-town").await?;
 
-    assert!(town_path.join("agents").exists());
-    assert!(town_path.join("logs").exists());
-    assert!(town_path.join("tasks").exists());
+    // All runtime artifacts go under .tt/
+    assert!(town_path.join(".tt").exists());
+    assert!(town_path.join(".tt/agents").exists());
+    assert!(town_path.join(".tt/logs").exists());
+    assert!(town_path.join(".tt/tasks").exists());
     assert!(town_path.join("tinytown.toml").exists());
 
     let config = town.config();
@@ -1172,10 +1174,11 @@ async fn test_town_init_creates_structure() -> Result<(), Box<dyn std::error::Er
 
     let _town = Town::init(town_path, "init-structure-test").await?;
 
-    // Verify expected directories exist
-    assert!(town_path.join("agents").exists());
-    assert!(town_path.join("logs").exists());
-    assert!(town_path.join("tasks").exists());
+    // Verify expected directories exist (all under .tt/)
+    assert!(town_path.join(".tt").exists());
+    assert!(town_path.join(".tt/agents").exists());
+    assert!(town_path.join(".tt/logs").exists());
+    assert!(town_path.join(".tt/tasks").exists());
 
     // Verify config file exists (note: uses .toml now, not .json)
     let toml_config = town_path.join("tinytown.toml");
@@ -1676,9 +1679,9 @@ async fn test_redis_config_defaults() -> Result<(), Box<dyn std::error::Error>> 
 
     let config = RedisConfig::default();
 
-    // Unix socket is default
+    // Unix socket is default (under .tt/)
     assert!(config.use_socket, "Default should use Unix socket");
-    assert_eq!(config.socket_path, "redis.sock");
+    assert_eq!(config.socket_path, ".tt/redis.sock");
 
     // TCP defaults
     assert_eq!(config.host, "127.0.0.1");

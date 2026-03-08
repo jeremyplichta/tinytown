@@ -8,8 +8,8 @@
 *.swp
 *.swo
 
-# Runtime
-redis.sock
+# Tinytown runtime artifacts
+.tt
 *.rdb
 tinytown.json
 

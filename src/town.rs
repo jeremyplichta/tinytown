@@ -24,10 +24,11 @@ use crate::global_config::GlobalConfig;
 use crate::message::{Message, MessageType};
 use crate::task::{Task, TaskId};
 
-/// Town directory structure
-const AGENTS_DIR: &str = "agents";
-const LOGS_DIR: &str = "logs";
-const TASKS_DIR: &str = "tasks";
+/// Town directory structure - all artifacts go under .tt/
+pub const TT_DIR: &str = ".tt";
+const AGENTS_DIR: &str = ".tt/agents";
+const LOGS_DIR: &str = ".tt/logs";
+const TASKS_DIR: &str = ".tt/tasks";
 
 /// Minimum required Redis version
 const MIN_REDIS_VERSION: (u32, u32) = (8, 0);
@@ -41,8 +42,8 @@ pub struct Town {
     processes: Arc<RwLock<HashMap<AgentId, Child>>>,
 }
 
-/// PID file name for tracking Redis process
-const REDIS_PID_FILE: &str = "redis.pid";
+/// PID file name for tracking Redis process (under .tt/)
+const REDIS_PID_FILE: &str = ".tt/redis.pid";
 
 /// Find the redis-server binary, preferring ~/.tt/bin over PATH.
 fn find_redis_server() -> std::path::PathBuf {
@@ -125,8 +126,9 @@ impl Town {
 
         info!("Initializing town '{}' at {}", name, path.display());
 
-        // Create directory structure
+        // Create directory structure - all artifacts go under .tt/
         std::fs::create_dir_all(path)?;
+        std::fs::create_dir_all(path.join(TT_DIR))?;
         std::fs::create_dir_all(path.join(AGENTS_DIR))?;
         std::fs::create_dir_all(path.join(LOGS_DIR))?;
         std::fs::create_dir_all(path.join(TASKS_DIR))?;

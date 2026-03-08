@@ -7,11 +7,17 @@ A **Town** is your orchestration workspace. It's the top-level container that ma
 ```
 my-project/           # Town root
 ├── tinytown.toml     # Configuration
-├── redis.sock        # Unix socket (when running)
-├── agents/           # Agent working directories
-├── logs/             # Activity logs
-└── tasks/            # Task storage
+├── .gitignore        # Auto-updated to exclude .tt/
+└── .tt/              # Runtime artifacts (gitignored)
+    ├── redis.sock    # Unix socket (when running)
+    ├── redis.pid     # Redis process ID
+    ├── redis.aof     # Redis persistence (if enabled)
+    ├── agents/       # Agent working directories
+    ├── logs/         # Activity logs
+    └── tasks/        # Task storage
 ```
+
+All runtime artifacts are stored under `.tt/` which is automatically added to `.gitignore` during `tt init`. This keeps your repository clean and prevents accidental commits of logs, sockets, and other temporary files.
 
 ## Creating a Town
 
@@ -54,7 +60,7 @@ max_agents = 10
 
 [redis]
 use_socket = true
-socket_path = "redis.sock"
+socket_path = ".tt/redis.sock"
 host = "127.0.0.1"
 port = 6379
 
@@ -73,7 +79,7 @@ command = "augment"
 |--------|---------|-------------|
 | `name` | Directory name | Human-readable town name |
 | `redis.use_socket` | `true` | Use Unix socket (faster) vs TCP |
-| `redis.socket_path` | `redis.sock` | Socket file path |
+| `redis.socket_path` | `.tt/redis.sock` | Socket file path (under .tt/) |
 | `redis.host` | `127.0.0.1` | TCP host (if not using socket) |
 | `redis.port` | `6379` | TCP port (if not using socket) |
 | `default_cli` | `claude` | Default CLI for new agents |

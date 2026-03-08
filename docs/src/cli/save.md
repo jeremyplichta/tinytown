@@ -16,7 +16,7 @@ Triggers Redis to compact and save its state to an AOF (Append Only File). This 
 
 1. Sends `BGREWRITEAOF` command to Redis
 2. Redis compacts all operations into a single AOF file
-3. File is saved to `redis.aof` (configurable in `tinytown.toml`)
+3. File is saved to `.tt/redis.aof` (configurable in `tinytown.toml`)
 
 ## Example
 
@@ -27,10 +27,10 @@ tt save
 Output:
 ```
 💾 Saving Redis state...
-   AOF rewrite triggered. File: ./redis.aof
+   AOF rewrite triggered. File: ./.tt/redis.aof
 
    To version control Redis state:
-   git add redis.aof
+   git add .tt/redis.aof
    git commit -m 'Save town state'
 ```
 
@@ -44,7 +44,7 @@ tt assign backend "Build the API"
 
 # Save state before committing code
 tt save
-git add redis.aof tasks.toml
+git add .tt/redis.aof tasks.toml
 git commit -m "API implementation complete"
 
 # Later, restore on another machine
@@ -66,7 +66,7 @@ In `tinytown.toml`:
 ```toml
 [redis]
 persist = true
-aof_path = "redis.aof"
+aof_path = ".tt/redis.aof"
 ```
 
 ## See Also

@@ -767,6 +767,29 @@ async fn main() -> Result<()> {
             let town = Town::init(&cli.town, &name).await?;
             info!("✨ Initialized town '{}' at {}", name, cli.town.display());
 
+            // Update .gitignore to exclude .tt directory (runtime artifacts)
+            let gitignore_path = cli.town.join(".gitignore");
+            let tt_entry = ".tt";
+            let needs_update = if gitignore_path.exists() {
+                let content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
+                !content.lines().any(|line| line.trim() == tt_entry)
+            } else {
+                true
+            };
+            if needs_update {
+                let mut content = if gitignore_path.exists() {
+                    std::fs::read_to_string(&gitignore_path).unwrap_or_default()
+                } else {
+                    String::new()
+                };
+                if !content.is_empty() && !content.ends_with('\n') {
+                    content.push('\n');
+                }
+                content.push_str("\n# Tinytown runtime artifacts\n.tt\n");
+                std::fs::write(&gitignore_path, content)?;
+                info!("📝 Added .tt to .gitignore");
+            }
+
             // Show appropriate message based on Redis mode
             if global.redis.use_central {
                 info!(
@@ -843,9 +866,9 @@ async fn main() -> Result<()> {
                     "🔄 Starting agent loop in background (max {} rounds)...",
                     max_rounds
                 );
-                info!("   Logs: {}/logs/{}.log", town_path.display(), name);
+                info!("   Logs: {}/.tt/logs/{}.log", town_path.display(), name);
 
-                let log_dir = town_path.join("logs");
+                let log_dir = town_path.join(".tt/logs");
                 std::fs::create_dir_all(&log_dir)?;
                 let log_file = std::fs::File::create(log_dir.join(format!("{}.log", name)))?;
 
@@ -984,7 +1007,7 @@ async fn main() -> Result<()> {
                 // Show recent logs from each agent
                 info!("");
                 info!("📜 Recent Agent Logs (last 50 lines each):");
-                let log_dir = cli.town.join("logs");
+                let log_dir = cli.town.join(".tt/logs");
                 if log_dir.exists() {
                     let mut shown_logs = std::collections::HashSet::new();
                     for agent in town.list_agents().await {
@@ -1559,8 +1582,8 @@ Only run commands needed to complete listed work; inbox messages for this round 
                     confirmation_count = breakdown.confirmations,
                 );
 
-                // Write prompt to temp file
-                let prompt_file = cli.town.join(format!(".agent_{}_prompt.md", name));
+                // Write prompt to temp file (under .tt/)
+                let prompt_file = cli.town.join(format!(".tt/agent_{}_prompt.md", name));
                 std::fs::write(&prompt_file, &prompt)?;
 
                 // Update agent state to working
@@ -1573,7 +1596,7 @@ Only run commands needed to complete listed work; inbox messages for this round 
                 info!("   🤖 Running {}...", cli_name);
                 let output_file = cli
                     .town
-                    .join(format!("logs/{}_round_{}.log", name, display_round));
+                    .join(format!(".tt/logs/{}_round_{}.log", name, display_round));
                 let output = std::fs::File::create(&output_file)?;
 
                 let shell_cmd = build_cli_command(&cli_name, &cli_cmd, &prompt_file);
@@ -1873,8 +1896,8 @@ Now, help the user orchestrate their project!
                 startup_mode = startup_mode,
             );
 
-            // Write context to a temp file for the CLI
-            let context_file = cli.town.join(".conductor_context.md");
+            // Write context to a temp file for the CLI (under .tt/)
+            let context_file = cli.town.join(".tt/conductor_context.md");
             std::fs::write(&context_file, &context)?;
 
             // Get the CLI name (conductor runs interactively, not in --print mode)
@@ -2079,7 +2102,7 @@ Now, help the user orchestrate their project!
 
                 // Check if the agent's process is still running by looking for its log file
                 // and checking if it was recently modified (within last 2 minutes)
-                let log_file = cli.town.join(format!("logs/{}.log", agent.name));
+                let log_file = cli.town.join(format!(".tt/logs/{}.log", agent.name));
                 let is_stale = if log_file.exists() {
                     if let Ok(metadata) = std::fs::metadata(&log_file) {
                         if let Ok(modified) = metadata.modified() {
@@ -2482,7 +2505,7 @@ Now, help the user orchestrate their project!
             info!("   Rounds: {}", rounds);
 
             // Spawn the agent loop process
-            let logs_dir = cli.town.join("logs");
+            let logs_dir = cli.town.join(".tt/logs");
             std::fs::create_dir_all(&logs_dir)?;
             let log_file = logs_dir.join(format!("{}.log", agent));
 

@@ -14,8 +14,8 @@ use crate::agent::AgentCli;
 use crate::error::{Error, Result};
 use crate::global_config::GlobalConfig;
 
-/// Default Redis socket path within a town.
-pub const DEFAULT_SOCKET_NAME: &str = "redis.sock";
+/// Default Redis socket path within a town (under .tt/).
+pub const DEFAULT_SOCKET_NAME: &str = ".tt/redis.sock";
 
 /// Default config file name.
 pub const CONFIG_FILE: &str = "tinytown.toml";
@@ -114,7 +114,7 @@ pub struct RedisConfig {
 }
 
 fn default_aof_path() -> String {
-    "redis.aof".to_string()
+    ".tt/redis.aof".to_string()
 }
 
 fn default_true() -> bool {
@@ -239,7 +239,7 @@ impl Config {
                     host: global.redis.host.clone(),
                     port: global.redis.port,
                     persist: false,
-                    aof_path: "redis.aof".to_string(),
+                    aof_path: default_aof_path(),
                     password: global.redis.password.clone(),
                     tls_enabled: false,
                     tls_cert: None,
