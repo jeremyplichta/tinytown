@@ -118,10 +118,10 @@ Tinytown uses these key patterns:
 
 | Pattern | Type | Purpose |
 |---------|------|---------|
-| `mt:inbox:<uuid>` | List | Agent message queues |
-| `mt:agent:<uuid>` | String | Agent state (JSON) |
-| `mt:task:<uuid>` | String | Task state (JSON) |
-| `mt:broadcast` | Pub/Sub | Broadcast channel |
+| `tt:inbox:<uuid>` | List | Agent message queues |
+| `tt:agent:<uuid>` | String | Agent state (JSON) |
+| `tt:task:<uuid>` | String | Task state (JSON) |
+| `tt:broadcast` | Pub/Sub | Broadcast channel |
 
 ## Debugging
 
@@ -139,13 +139,13 @@ redis-cli -h 127.0.0.1 -p 6379
 
 ```bash
 # List all tinytown keys
-KEYS mt:*
+KEYS tt:*
 
 # Check inbox length
-LLEN mt:inbox:550e8400-...
+LLEN tt:inbox:550e8400-...
 
 # View agent state
-GET mt:agent:550e8400-...
+GET tt:agent:550e8400-...
 
 # Monitor all operations
 MONITOR

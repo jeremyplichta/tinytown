@@ -18,22 +18,22 @@ use crate::error::Result;
 use crate::message::{Message, Priority};
 
 /// Key prefix for agent inboxes
-const INBOX_PREFIX: &str = "mt:inbox:";
+const INBOX_PREFIX: &str = "tt:inbox:";
 
 /// Key prefix for agent state
-const STATE_PREFIX: &str = "mt:agent:";
+const STATE_PREFIX: &str = "tt:agent:";
 
 /// Key prefix for tasks
-const TASK_PREFIX: &str = "mt:task:";
+const TASK_PREFIX: &str = "tt:task:";
 
 /// Key prefix for agent activity logs
-const ACTIVITY_PREFIX: &str = "mt:activity:";
+const ACTIVITY_PREFIX: &str = "tt:activity:";
 
 /// Key prefix for urgent inbox
-const URGENT_PREFIX: &str = "mt:urgent:";
+const URGENT_PREFIX: &str = "tt:urgent:";
 
 /// Key prefix for stop flags
-const STOP_PREFIX: &str = "mt:stop:";
+const STOP_PREFIX: &str = "tt:stop:";
 
 /// TTL for activity logs (1 hour)
 const ACTIVITY_TTL_SECS: u64 = 3600;
@@ -42,7 +42,7 @@ const ACTIVITY_TTL_SECS: u64 = 3600;
 const ACTIVITY_MAX_ENTRIES: isize = 10;
 
 /// Pub/sub channel for broadcasts
-const BROADCAST_CHANNEL: &str = "mt:broadcast";
+const BROADCAST_CHANNEL: &str = "tt:broadcast";
 
 /// Redis-based communication channel.
 #[derive(Clone)]

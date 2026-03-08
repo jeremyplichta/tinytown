@@ -109,13 +109,13 @@ For more detail:
 redis-cli -s ./redis.sock
 
 # List all keys
-KEYS mt:*
+KEYS tt:*
 
 # Check specific inbox
-LLEN mt:inbox:550e8400-e29b-41d4-a716-446655440000
+LLEN tt:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # View agent state
-GET mt:agent:550e8400-e29b-41d4-a716-446655440000
+GET tt:agent:550e8400-e29b-41d4-a716-446655440000
 ```
 
 ## See Also

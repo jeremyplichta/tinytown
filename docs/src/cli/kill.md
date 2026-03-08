@@ -62,7 +62,7 @@ Output:
 
 ## How It Works
 
-1. Sets a stop flag in Redis: `mt:stop:<agent-id>`
+1. Sets a stop flag in Redis: `tt:stop:<agent-id>`
 2. Agent checks this flag at start of each round
 3. If flag is set, agent exits loop gracefully
 4. Flag has 1-hour TTL (auto-cleanup if agent already dead)

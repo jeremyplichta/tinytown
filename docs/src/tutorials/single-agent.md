@@ -105,21 +105,21 @@ Your Code                     Redis                        Agent
     │                           │                            │
     │  spawn_agent()            │                            │
     │ ─────────────────────────►│                            │
-    │                           │  SET mt:agent:xxx          │
+    │                           │  SET tt:agent:xxx          │
     │                           │ ───────────────────────────│
     │                           │                            │
     │  assign(task)             │                            │
     │ ─────────────────────────►│                            │
-    │                           │  SET mt:task:yyy           │
-    │                           │  RPUSH mt:inbox:xxx        │
+    │                           │  SET tt:task:yyy           │
+    │                           │  RPUSH tt:inbox:xxx        │
     │                           │ ───────────────────────────│
     │                           │                            │
-    │                           │  BLPOP mt:inbox:xxx        │
+    │                           │  BLPOP tt:inbox:xxx        │
     │                           │◄───────────────────────────│
     │                           │                            │
     │  state()                  │                            │
     │ ─────────────────────────►│                            │
-    │                           │  GET mt:agent:xxx          │
+    │                           │  GET tt:agent:xxx          │
     │◄───────────────────────── │                            │
 ```
 
@@ -132,7 +132,7 @@ In a real workflow, Claude (or another AI) receives the task. For testing, you c
 redis-cli -s ./redis.sock
 
 # Get the inbox message
-LPOP mt:inbox:550e8400-e29b-41d4-a716-446655440000
+LPOP tt:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # Update agent state to idle
 # (In practice, the agent process does this)

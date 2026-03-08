@@ -115,12 +115,12 @@ if task.state.is_terminal() {
 Tasks are stored as JSON:
 
 ```
-mt:task:<uuid>  →  JSON serialized Task struct
+tt:task:<uuid>  →  JSON serialized Task struct
 ```
 
 You can inspect tasks directly:
 ```bash
-redis-cli -s ./redis.sock GET "mt:task:550e8400-e29b-41d4-a716-446655440000"
+redis-cli -s ./redis.sock GET "tt:task:550e8400-e29b-41d4-a716-446655440000"
 ```
 
 ## Hierarchical Tasks

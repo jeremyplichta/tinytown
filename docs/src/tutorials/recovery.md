@@ -196,12 +196,12 @@ When things go wrong:
 
 3. **Check inbox** — Are messages stuck?
    ```bash
-   redis-cli -s ./redis.sock LLEN mt:inbox:<agent-id>
+   redis-cli -s ./redis.sock LLEN tt:inbox:<agent-id>
    ```
 
 4. **Check task** — What happened to the task?
    ```bash
-   redis-cli -s ./redis.sock GET mt:task:<task-id>
+   redis-cli -s ./redis.sock GET tt:task:<task-id>
    ```
 
 5. **Check logs** — Look in `logs/` directory

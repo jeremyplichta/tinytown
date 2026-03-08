@@ -72,12 +72,12 @@ tt send developer --urgent "Critical: SQL injection in login. Fix immediately."
 ## How It Works
 
 ### Regular Messages
-1. Goes to `mt:inbox:<id>` (Redis list)
+1. Goes to `tt:inbox:<id>` (Redis list)
 2. Processed in order with other messages
 3. Agent sees it when they check inbox
 
 ### Urgent Messages
-1. Goes to `mt:urgent:<id>` (separate priority queue)
+1. Goes to `tt:urgent:<id>` (separate priority queue)
 2. Agent checks urgent queue FIRST at start of each round
 3. Urgent messages injected into agent's prompt with 🚨 marker
 4. Processed before regular inbox
