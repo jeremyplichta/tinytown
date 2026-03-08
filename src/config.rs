@@ -45,6 +45,11 @@ pub struct Config {
     /// Maximum concurrent agents
     #[serde(default = "default_max_agents")]
     pub max_agents: usize,
+
+    /// Whether using central Redis (managed in ~/.tt/) vs per-town Redis
+    /// This is set at creation time based on GlobalConfig and not re-read
+    #[serde(default)]
+    pub use_central_redis: bool,
 }
 
 fn default_cli() -> String {
@@ -162,8 +167,9 @@ impl Config {
     /// - `TT_USE_SOCKET=1` - Force Unix socket mode (useful for tests)
     #[must_use]
     pub fn new(name: impl Into<String>, root: impl Into<PathBuf>) -> Self {
-        // Load global config for defaults
-        let global = GlobalConfig::load().unwrap_or_default();
+        // Load global config for defaults, initializing with password if needed
+        // This ensures central Redis always has a password even when called as library
+        let global = GlobalConfig::load_or_init().unwrap_or_default();
 
         // Check for test/override mode - force Unix socket if TT_USE_SOCKET=1
         let force_socket = std::env::var("TT_USE_SOCKET")
@@ -212,27 +218,30 @@ impl Config {
         // Build Redis config from global settings
         // By default, use central TCP Redis (not per-town Unix sockets)
         // Unless TT_USE_SOCKET=1 is set (for tests/isolation)
-        let redis = if force_socket {
+        let (redis, use_central_redis) = if force_socket {
             // Force Unix socket mode (for tests or explicit isolation)
-            RedisConfig::default()
+            (RedisConfig::default(), false)
         } else if global.redis.use_central {
-            RedisConfig {
-                use_socket: false,
-                socket_path: DEFAULT_SOCKET_NAME.to_string(),
-                host: global.redis.host.clone(),
-                port: global.redis.port,
-                persist: false,
-                aof_path: "redis.aof".to_string(),
-                password: global.redis.password.clone(),
-                tls_enabled: false,
-                tls_cert: None,
-                tls_key: None,
-                tls_ca_cert: None,
-                bind: "127.0.0.1".to_string(),
-            }
+            (
+                RedisConfig {
+                    use_socket: false,
+                    socket_path: DEFAULT_SOCKET_NAME.to_string(),
+                    host: global.redis.host.clone(),
+                    port: global.redis.port,
+                    persist: false,
+                    aof_path: "redis.aof".to_string(),
+                    password: global.redis.password.clone(),
+                    tls_enabled: false,
+                    tls_cert: None,
+                    tls_key: None,
+                    tls_ca_cert: None,
+                    bind: "127.0.0.1".to_string(),
+                },
+                true,
+            )
         } else {
             // Fall back to per-town Unix socket
-            RedisConfig::default()
+            (RedisConfig::default(), false)
         };
 
         Self {
@@ -242,6 +251,7 @@ impl Config {
             agent_clis,
             default_cli: global.default_cli.clone(),
             max_agents: 10,
+            use_central_redis,
         }
     }
 
@@ -369,13 +379,9 @@ impl Config {
 
     /// Check if using central Redis (TCP on localhost with global config port).
     /// Central Redis is managed globally in ~/.tt/ rather than per-town.
+    /// This uses the flag set at config creation time, avoiding re-reading global config.
     #[must_use]
     pub fn is_central_redis(&self) -> bool {
-        // Central Redis: TCP mode, localhost, using the global config port
-        let global = GlobalConfig::load().unwrap_or_default();
-        !self.redis.use_socket
-            && (self.redis.host == "127.0.0.1" || self.redis.host == "localhost")
-            && self.redis.port == global.redis.port
-            && global.redis.use_central
+        self.use_central_redis
     }
 }

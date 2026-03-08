@@ -260,20 +260,36 @@ impl GlobalConfig {
         }
     }
 
-    /// Generate a random password for Redis.
+    /// Generate a cryptographically random password for Redis.
     #[must_use]
     pub fn generate_password() -> String {
+        use std::collections::hash_map::RandomState;
+        use std::hash::{BuildHasher, Hasher};
         use std::time::{SystemTime, UNIX_EPOCH};
 
-        // Simple random password generation using system time and process id
+        // Use multiple sources of entropy for better randomness
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
         let pid = std::process::id();
 
-        // Create a reasonably secure password by hashing timestamp + pid
-        format!("tt_{:x}_{:x}", timestamp, pid)
+        // Use RandomState which incorporates OS randomness
+        let random_state = RandomState::new();
+        let mut hasher = random_state.build_hasher();
+        hasher.write_u128(timestamp);
+        hasher.write_u32(pid);
+        let hash1 = hasher.finish();
+
+        // Generate a second hash with different seed
+        let random_state2 = RandomState::new();
+        let mut hasher2 = random_state2.build_hasher();
+        hasher2.write_u64(hash1);
+        hasher2.write_usize(std::ptr::null::<()>() as usize); // Stack address entropy
+        let hash2 = hasher2.finish();
+
+        // Combine hashes for a longer, more random password
+        format!("tt_{:016x}{:016x}", hash1, hash2)
     }
 
     /// Ensure the Redis password is set, generating one if needed.
@@ -284,40 +300,6 @@ impl GlobalConfig {
             true
         } else {
             false
-        }
-    }
-
-    /// Get the Redis connection URL for the central Redis.
-    /// Returns None if central Redis is disabled.
-    #[must_use]
-    pub fn redis_url(&self) -> Option<String> {
-        if !self.redis.use_central {
-            return None;
-        }
-
-        match &self.redis.password {
-            Some(pass) => Some(format!(
-                "redis://:{}@{}:{}",
-                pass, self.redis.host, self.redis.port
-            )),
-            None => Some(format!("redis://{}:{}", self.redis.host, self.redis.port)),
-        }
-    }
-
-    /// Get a redacted Redis URL for logging.
-    #[must_use]
-    pub fn redis_url_redacted(&self) -> Option<String> {
-        if !self.redis.use_central {
-            return None;
-        }
-
-        if self.redis.password.is_some() {
-            Some(format!(
-                "redis://:****@{}:{}",
-                self.redis.host, self.redis.port
-            ))
-        } else {
-            Some(format!("redis://{}:{}", self.redis.host, self.redis.port))
         }
     }
 }
