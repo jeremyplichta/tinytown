@@ -132,8 +132,8 @@ handle.wait().await?;
 Agents are persisted in Redis:
 
 ```
-mt:agent:<uuid>  →  JSON serialized Agent struct
-mt:inbox:<uuid>  →  List of pending messages
+tt:agent:<uuid>  →  JSON serialized Agent struct
+tt:inbox:<uuid>  →  List of pending messages
 ```
 
 This means:

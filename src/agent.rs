@@ -49,6 +49,14 @@ impl std::fmt::Display for AgentId {
     }
 }
 
+impl std::str::FromStr for AgentId {
+    type Err = uuid::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self(Uuid::parse_str(s)?))
+    }
+}
+
 /// Agent types in the system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
@@ -141,6 +149,9 @@ pub struct Agent {
     pub last_heartbeat: DateTime<Utc>,
     /// Number of tasks completed
     pub tasks_completed: u64,
+    /// Number of rounds completed
+    #[serde(default)]
+    pub rounds_completed: u64,
 }
 
 impl Agent {
@@ -158,6 +169,7 @@ impl Agent {
             created_at: now,
             last_heartbeat: now,
             tasks_completed: 0,
+            rounds_completed: 0,
         }
     }
 
@@ -175,6 +187,7 @@ impl Agent {
             created_at: now,
             last_heartbeat: now,
             tasks_completed: 0,
+            rounds_completed: 0,
         }
     }
 }

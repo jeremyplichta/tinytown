@@ -717,3 +717,127 @@ async fn test_many_messages() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+
+// ============================================================================
+// TASK PLANNING DSL TESTS
+// ============================================================================
+
+/// Test that tasks.toml can be initialized.
+#[tokio::test]
+async fn test_plan_init_tasks_file() -> Result<(), Box<dyn std::error::Error>> {
+    let temp_dir = TempDir::new()?;
+
+    // Initialize tasks file
+    tinytown::plan::init_tasks_file(temp_dir.path())?;
+
+    // Check file exists
+    let tasks_file = temp_dir.path().join("tasks.toml");
+    assert!(tasks_file.exists());
+
+    // Load and verify structure
+    let tasks = tinytown::plan::load_tasks_file(temp_dir.path())?;
+    assert_eq!(tasks.meta.description, "Task plan for this project");
+    assert_eq!(tasks.tasks.len(), 1);
+    assert_eq!(tasks.tasks[0].id, "example-1");
+    assert_eq!(tasks.tasks[0].status, "pending");
+
+    Ok(())
+}
+
+/// Test loading and saving tasks file.
+#[tokio::test]
+async fn test_plan_load_save_tasks_file() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::plan::{TaskEntry, TasksFile, TasksMeta};
+
+    let temp_dir = TempDir::new()?;
+
+    // Create a custom tasks file
+    let tasks = TasksFile {
+        meta: TasksMeta {
+            description: "Test plan".to_string(),
+            default_agent: Some("developer".to_string()),
+        },
+        tasks: vec![
+            TaskEntry {
+                id: "task-1".to_string(),
+                description: "Build the API".to_string(),
+                agent: Some("backend".to_string()),
+                status: "pending".to_string(),
+                tags: vec!["api".to_string(), "backend".to_string()],
+                parent: None,
+            },
+            TaskEntry {
+                id: "task-2".to_string(),
+                description: "Write tests".to_string(),
+                agent: Some("tester".to_string()),
+                status: "pending".to_string(),
+                tags: vec!["tests".to_string()],
+                parent: Some("task-1".to_string()),
+            },
+        ],
+    };
+
+    // Save
+    tinytown::plan::save_tasks_file(temp_dir.path(), &tasks)?;
+
+    // Load back
+    let loaded = tinytown::plan::load_tasks_file(temp_dir.path())?;
+
+    assert_eq!(loaded.meta.description, "Test plan");
+    assert_eq!(loaded.meta.default_agent, Some("developer".to_string()));
+    assert_eq!(loaded.tasks.len(), 2);
+    assert_eq!(loaded.tasks[0].id, "task-1");
+    assert_eq!(loaded.tasks[0].agent, Some("backend".to_string()));
+    assert_eq!(loaded.tasks[1].parent, Some("task-1".to_string()));
+
+    Ok(())
+}
+
+/// Test pushing tasks from file to Redis.
+#[tokio::test]
+async fn test_plan_push_to_redis() -> Result<(), Box<dyn std::error::Error>> {
+    let (town, temp_dir) = create_test_town("plan-push-test").await?;
+
+    // Initialize and modify tasks file
+    tinytown::plan::init_tasks_file(temp_dir.path())?;
+
+    let tasks = tinytown::plan::TasksFile {
+        meta: tinytown::plan::TasksMeta {
+            description: "Push test".to_string(),
+            default_agent: None,
+        },
+        tasks: vec![tinytown::plan::TaskEntry {
+            id: "push-task-1".to_string(),
+            description: "Task to push".to_string(),
+            agent: None,
+            status: "pending".to_string(),
+            tags: vec!["test".to_string()],
+            parent: None,
+        }],
+    };
+    tinytown::plan::save_tasks_file(temp_dir.path(), &tasks)?;
+
+    // Push to Redis
+    let count = tinytown::plan::push_tasks_to_redis(temp_dir.path(), town.channel()).await?;
+    assert_eq!(count, 1);
+
+    Ok(())
+}
+
+/// Test that default_model is used when spawning without --model.
+#[tokio::test]
+async fn test_default_model_config() -> Result<(), Box<dyn std::error::Error>> {
+    let (town, _temp_dir) = create_test_town("default-model-test").await?;
+
+    // Config should have a default_model
+    let config = town.config();
+    assert!(!config.default_model.is_empty());
+    assert_eq!(config.default_model, "claude"); // Default is claude
+
+    // Models should include built-in presets
+    assert!(config.models.contains_key("claude"));
+    assert!(config.models.contains_key("auggie"));
+    assert!(config.models.contains_key("codex"));
+
+    Ok(())
+}

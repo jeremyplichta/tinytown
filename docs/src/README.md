@@ -43,10 +43,10 @@ When you need those features, you'll know — and you can add them yourself in a
 # Initialize a town
 tt init --name my-project
 
-# Spawn agents
-tt spawn frontend --model claude
-tt spawn backend --model auggie
-tt spawn reviewer --model codex
+# Spawn agents (uses default model, or specify with --model)
+tt spawn frontend
+tt spawn backend
+tt spawn reviewer
 
 # Assign tasks
 tt assign frontend "Build the login page"
@@ -55,6 +55,11 @@ tt assign reviewer "Review PRs when ready"
 
 # Check status
 tt status
+
+# Or let the conductor orchestrate for you!
+tt conductor
+# "Build a user authentication system"
+# Conductor spawns agents, breaks down tasks, and coordinates...
 ```
 
 That's it. Your agents are now coordinating via Redis.

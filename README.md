@@ -27,23 +27,35 @@ Think of it as:
 | **Setup time** | 30 seconds | Hours |
 | **Config files** | 1 JSON | 10+ YAML files |
 | **Core concepts** | 5 types | 50+ concepts |
+| **CLI commands** | 13 | 50+ |
 | **Message latency** | <1ms (Unix socket) | 10-100ms |
-| **Lines of code** | ~1,000 | 50,000+ |
+| **Lines of code** | ~2,600 | 50,000+ |
 
 ## 🚀 Quick Start
 
 ```bash
-# 1. Initialize a new town
-tt init --name my-town
+# 0. Bootstrap Redis (one-time setup, uses AI to download & build)
+tt bootstrap
+export PATH="$HOME/.tt/bin:$PATH"
 
-# 2. Spawn an agent
-tt spawn worker-1 --model claude
+# 1. Initialize a new town (auto-names from git repo+branch)
+tt init
+# Creates town "my-repo-feature-branch"
+
+# 2. Spawn an agent (uses default CLI from config)
+tt spawn worker-1
 
 # 3. Assign a task
 tt assign worker-1 "Fix the bug in auth.rs"
+
+# 4. Or use the conductor - an AI that orchestrates for you
+tt conductor
+# Conductor: "I'll spawn agents and assign tasks. What do you want to build?"
 ```
 
 That's it! Your agents are now coordinating via Redis.
+
+> **Note:** `tt bootstrap` delegates to an AI agent to download Redis from GitHub and compile it for your machine. Alternatively: `brew install redis` (macOS) or `apt install redis-server` (Ubuntu).
 
 ## 💻 Code Example
 
@@ -106,31 +118,38 @@ Tinytown is built on **5 core types**:
 
 | Command | Description |
 |---------|-------------|
+| `tt bootstrap [version]` | Download & build Redis (uses AI agent) |
 | `tt init` | Initialize a new town |
-| `tt spawn <name>` | Create a new agent |
+| `tt spawn <name>` | Create a new agent (starts AI process!) |
 | `tt assign <agent> <task>` | Assign a task |
 | `tt list` | List all agents |
-| `tt status` | Show town status |
-| `tt start` | Start the town |
-| `tt stop` | Stop the town |
+| `tt status [--deep]` | Show town status (--deep for activity) |
+| `tt kill <agent>` | Stop an agent gracefully |
+| `tt inbox <agent>` | Check agent's message inbox |
+| `tt send [--urgent] <agent> <msg>` | Send message to agent |
+| `tt conductor` | 🚂 AI orchestrator mode |
+| `tt plan --init` | Create tasks.toml for planning |
+| `tt sync [push\|pull]` | Sync tasks.toml ↔ Redis |
+| `tt save` | Save Redis state to AOF (for git) |
+| `tt restore` | Restore Redis state from AOF |
 
-## 🤖 Supported Models
+## 🤖 Supported Agent CLIs
 
-Built-in presets for popular AI coding agents:
+Built-in presets for popular AI coding agents (with correct non-interactive flags):
 
-| Model | Command |
-|-------|---------|
-| `claude` | `claude --print` |
-| `auggie` | `augment` |
-| `codex` | `codex` |
+| CLI | Command |
+|-----|---------|
+| `claude` | `claude --print --dangerously-skip-permissions` |
+| `auggie` | `auggie --print` |
+| `codex` | `codex exec --dangerously-bypass-approvals-and-sandbox` |
+| `aider` | `aider --yes --no-auto-commits --message` |
 | `gemini` | `gemini` |
 | `copilot` | `gh copilot` |
-| `aider` | `aider` |
 | `cursor` | `cursor` |
 
 ```bash
-# Use any built-in model
-tt spawn worker-1 --model claude
+# Spawn uses default CLI from config (or override)
+tt spawn worker-1
 tt spawn worker-2 --model auggie
 tt spawn worker-3 --model codex
 ```
@@ -149,6 +168,25 @@ Single `tinytown.json` file:
   "default_model": "claude",
   "max_agents": 10
 }
+```
+
+### Setting the Default CLI
+
+Change `default_model` in `tinytown.json` to set which AI CLI is used when spawning agents:
+
+```json
+{
+  "default_model": "auggie"
+}
+```
+
+Available options: `claude`, `auggie`, `codex`, `aider`, `gemini`, `copilot`, `cursor`
+
+Or override per-agent:
+
+```bash
+tt spawn backend              # Uses default_model from config
+tt spawn frontend --model auggie   # Override for this agent
 ```
 
 ## 🎯 Design Philosophy

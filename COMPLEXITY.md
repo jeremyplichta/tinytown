@@ -6,28 +6,31 @@ This document compares the complexity of **Tinytown** (simple multi-agent orches
 
 | Metric | Tinytown | Gastown | Ratio |
 |--------|----------|---------|-------|
-| **Total Lines of Code** | 1,448 | 317,898 | **220x smaller** |
-| **Total Functions** | 69 | 9,575 | **139x fewer** |
-| **Files** | 13 | 1,133 | **87x fewer** |
+| **Total Lines of Code** | 2,634 | 317,898 | **121x smaller** |
+| **Total Functions** | 86 | 9,575 | **111x fewer** |
+| **Files** | 10 | 1,133 | **113x fewer** |
 | **Languages** | 1 (Rust) | 16 | **16x simpler** |
 | **Core Types** | 5 | 50+ | **10x fewer concepts** |
+| **CLI Commands** | 13 | 50+ | **4x fewer commands** |
 | **Config Files** | 1 JSON | 10+ YAML/TOML/JSON | **10x simpler config** |
+| **Tests** | 36 | N/A | ✅ |
 | **Avg Cyclomatic Complexity** | Low | 5.44 | ✅ |
 | **Avg Cognitive Complexity** | Low | 6.1 | ✅ |
 
 ## Lines of Code Comparison
 
-### Tinytown (tokei output)
+### Tinytown (current)
 ```
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Language              Files        Lines         Code     Comments       Blanks
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Rust                     10         1826         1374           71          381
- Markdown                  1          126            0           90           36
- TOML                      1           47           31            7            9
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- Total                    12         2302         1435          421          446
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Source Code:
+  src/*.rs         2,634 lines (10 files)
+
+Tests:
+  tests/*.rs         852 lines (36 tests)
+
+Documentation:
+  docs/src/*.md    5,200+ lines
+
+Total Production Code: ~2,634 lines of Rust
 ```
 
 ### Gastown (tokei output)
@@ -95,19 +98,24 @@ That's **139x fewer functions** than Gastown (69 vs 9,575).
 
 ### Test Coverage
 ```
-32 integration tests - 100% passing
-1 doctest - 100% passing
+36 integration tests - 100% passing
+All tests pass with Redis 8.0+
 ```
 
 ## Architectural Complexity
 
-### Tinytown: 5 Core Types
+### Tinytown: 5 Core Types + 13 CLI Commands
 ```
-Town     → Orchestrator (1 file, ~150 lines)
-Agent    → Worker definition (1 file, ~100 lines)
-Task     → Work unit (1 file, ~100 lines)
-Message  → Inter-agent comms (1 file, ~80 lines)
-Channel  → Redis connection (1 file, ~150 lines)
+Core Types:
+  Town     → Orchestrator (1 file, ~150 lines)
+  Agent    → Worker definition (1 file, ~100 lines)
+  Task     → Work unit (1 file, ~100 lines)
+  Message  → Inter-agent comms (1 file, ~80 lines)
+  Channel  → Redis connection (1 file, ~250 lines)
+
+CLI Commands (13):
+  tt init, spawn, assign, list, status, kill
+  tt inbox, send, conductor, plan, sync, start, stop
 ```
 
 ### Gastown: 50+ Concepts
@@ -147,7 +155,7 @@ Monitoring: Feed, Dashboard, OTEL
 |----------|----------|---------|
 | **Setup time** | 30 seconds | Hours |
 | **Learning curve** | 1 hour | Days/Weeks |
-| **Debugging** | Read 1,400 lines | Navigate 318,000 lines |
+| **Debugging** | Read ~2,600 lines | Navigate 318,000 lines |
 | **Customization** | Modify directly | Understand 50+ concepts first |
 | **Resource usage** | Minimal (Redis only) | Dolt SQL + Redis + Daemon |
 | **Deployment** | Single binary | Docker Compose + multiple services |

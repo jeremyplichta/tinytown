@@ -14,11 +14,13 @@ Displays comprehensive status of the town including:
 - Town name and location
 - Redis connection info
 - All agents with their states and pending messages
+- **With `--deep`**: Recent activity from each agent
 
 ## Options
 
 | Option | Short | Description |
 |--------|-------|-------------|
+| `--deep` | | Show recent agent activity (stored in Redis) |
 | `--town <PATH>` | `-t` | Town directory (default: `.`) |
 | `--verbose` | `-v` | Enable verbose logging |
 
@@ -30,8 +32,7 @@ Displays comprehensive status of the town including:
 tt status
 ```
 
-## Output
-
+Output:
 ```
 🏘️  Town: my-project
 📂 Root: /Users/you/projects/my-project
@@ -41,6 +42,38 @@ tt status
    frontend (Idle) - 2 messages pending
    reviewer (Idle) - 1 messages pending
 ```
+
+### Deep Status (with stats and activity)
+
+```bash
+tt status --deep
+```
+
+Output:
+```
+🏘️  Town: my-project
+📂 Root: /Users/you/projects/my-project
+📡 Redis: unix:///Users/you/projects/my-project/redis.sock
+🤖 Agents: 3
+   backend (Working) - 0 pending, 12 rounds, uptime 1h 23m
+      └─ Round 12: ✅ completed
+      └─ Round 11: ✅ completed
+   frontend (Idle) - 2 pending, 5 rounds, uptime 45m 12s
+      └─ Round 5: ✅ completed
+   reviewer (Idle) - 1 pending, 2 rounds, uptime 30m 5s
+      └─ Round 2: ⚠️ model error
+
+📊 Stats: rounds completed, uptime since spawn
+```
+
+## Stats Shown
+
+| Stat | Description |
+|------|-------------|
+| **Rounds** | Number of agent loop iterations completed |
+| **Uptime** | Time since agent was spawned |
+| **Pending** | Messages waiting in inbox |
+| **Activity** | Recent round results (last 5) |
 
 ## Output Fields
 
@@ -83,13 +116,13 @@ For more detail:
 redis-cli -s ./redis.sock
 
 # List all keys
-KEYS mt:*
+KEYS tt:*
 
 # Check specific inbox
-LLEN mt:inbox:550e8400-e29b-41d4-a716-446655440000
+LLEN tt:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # View agent state
-GET mt:agent:550e8400-e29b-41d4-a716-446655440000
+GET tt:agent:550e8400-e29b-41d4-a716-446655440000
 ```
 
 ## See Also

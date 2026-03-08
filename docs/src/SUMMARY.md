@@ -16,6 +16,7 @@
 - [Tasks](./concepts/tasks.md)
 - [Messages](./concepts/messages.md)
 - [Channels](./concepts/channels.md)
+- [Coordination](./concepts/coordination.md)
 
 # Tutorials
 
@@ -26,11 +27,20 @@
 
 # CLI Reference
 
+- [tt bootstrap](./cli/bootstrap.md)
 - [tt init](./cli/init.md)
 - [tt spawn](./cli/spawn.md)
 - [tt assign](./cli/assign.md)
 - [tt list](./cli/list.md)
 - [tt status](./cli/status.md)
+- [tt inbox](./cli/inbox.md)
+- [tt send](./cli/send.md)
+- [tt kill](./cli/kill.md)
+- [tt conductor](./cli/conductor.md)
+- [tt plan](./cli/plan.md)
+- [tt sync](./cli/sync.md)
+- [tt save](./cli/save.md)
+- [tt restore](./cli/restore.md)
 
 # Coming from Gastown?
 

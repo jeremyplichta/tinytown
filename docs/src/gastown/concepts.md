@@ -194,9 +194,9 @@ Direct, simple, explicit.
 ### Tinytown: Redis
 
 Everything in Redis:
-- `mt:agent:<id>` - Agent state
-- `mt:task:<id>` - Task state
-- `mt:inbox:<id>` - Message queues
+- `tt:agent:<id>` - Agent state
+- `tt:task:<id>` - Task state
+- `tt:inbox:<id>` - Message queues
 
 Enable Redis persistence (RDB/AOF) for durability.
 

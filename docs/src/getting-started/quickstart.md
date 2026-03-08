@@ -33,7 +33,7 @@ This creates:
 Agents are workers that execute tasks. Spawn one:
 
 ```bash
-tt spawn worker-1 --model claude
+tt spawn worker-1
 ```
 
 Output:
@@ -42,10 +42,15 @@ Output:
    ID: 550e8400-e29b-41d4-a716-446655440000
 ```
 
-Spawn a few more:
+The agent uses `default_model` from your config. Spawn more:
 ```bash
-tt spawn worker-2 --model auggie
-tt spawn reviewer --model codex
+tt spawn worker-2
+tt spawn reviewer
+```
+
+Or override with `--model`:
+```bash
+tt spawn specialist --model codex
 ```
 
 ## Step 3: Assign Tasks
