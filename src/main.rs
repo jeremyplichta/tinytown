@@ -107,6 +107,10 @@ enum Commands {
 
         /// Message content
         message: String,
+
+        /// Send as urgent (processed before regular inbox)
+        #[arg(long)]
+        urgent: bool,
     },
 
     /// Start the conductor (interactive orchestration mode)
@@ -312,7 +316,11 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Send { to, message } => {
+        Commands::Send {
+            to,
+            message,
+            urgent,
+        } => {
             use tinytown::{AgentId, Message, MessageType};
 
             let town = Town::connect(&cli.town).await?;
@@ -324,13 +332,22 @@ async fn main() -> Result<()> {
                 AgentId::supervisor(), // From conductor/supervisor
                 to_id,
                 MessageType::Custom {
-                    kind: "task".to_string(),
+                    kind: if urgent {
+                        "urgent".to_string()
+                    } else {
+                        "task".to_string()
+                    },
                     payload: message.clone(),
                 },
             );
 
-            town.channel().send(&msg).await?;
-            info!("📤 Sent message to '{}': {}", to, message);
+            if urgent {
+                town.channel().send_urgent(&msg).await?;
+                info!("🚨 Sent URGENT message to '{}': {}", to, message);
+            } else {
+                town.channel().send(&msg).await?;
+                info!("📤 Sent message to '{}': {}", to, message);
+            }
         }
 
         Commands::AgentLoop {
@@ -374,9 +391,31 @@ async fn main() -> Result<()> {
             for round in 1..=max_rounds {
                 info!("\n📍 Round {}/{}", round, max_rounds);
 
-                // Check inbox for messages
+                // Check URGENT inbox first (priority messages)
+                let urgent_messages = channel.receive_urgent(agent_id).await?;
+                if !urgent_messages.is_empty() {
+                    info!("   🚨 {} URGENT messages!", urgent_messages.len());
+                    for msg in &urgent_messages {
+                        if let tinytown::MessageType::Custom { kind, payload } = &msg.msg_type {
+                            info!("      └─ [{}] {}", kind, payload);
+                        }
+                    }
+                    // Log that we processed urgent messages
+                    channel
+                        .log_agent_activity(
+                            agent_id,
+                            &format!(
+                                "Round {}: 🚨 processed {} urgent",
+                                round,
+                                urgent_messages.len()
+                            ),
+                        )
+                        .await?;
+                }
+
+                // Check regular inbox for messages
                 let inbox_len = channel.inbox_len(agent_id).await?;
-                if inbox_len == 0 {
+                if inbox_len == 0 && urgent_messages.is_empty() {
                     info!("   📭 Inbox empty, waiting...");
                     tokio::time::sleep(Duration::from_secs(5)).await;
                     continue;
@@ -384,12 +423,25 @@ async fn main() -> Result<()> {
 
                 info!("   📬 {} messages in inbox", inbox_len);
 
+                // Build urgent messages section
+                let urgent_section = if urgent_messages.is_empty() {
+                    String::new()
+                } else {
+                    let mut section = String::from("\n## 🚨 URGENT MESSAGES (handle first!)\n\n");
+                    for msg in &urgent_messages {
+                        if let tinytown::MessageType::Custom { payload, .. } = &msg.msg_type {
+                            section.push_str(&format!("- {}\n", payload));
+                        }
+                    }
+                    section
+                };
+
                 // Build prompt with agent context
                 let prompt = format!(
                     r#"# Agent: {name}
 
 You are agent "{name}" in Tinytown "{town_name}".
-
+{urgent_section}
 ## Your Task
 Check your inbox and complete any assigned tasks. Use the `tt` CLI:
 
@@ -402,20 +454,24 @@ tt assign <agent> "task"     # Send task to another agent (for handoffs)
 ## Current State
 - Round: {round}/{max_rounds}
 - Messages waiting: {inbox_len}
+- Urgent messages: {urgent_count}
 
 ## Instructions
-1. Complete your assigned task
-2. When done, your output will be logged
-3. If you need to hand off work, use `tt assign`
-4. If blocked, describe what you need
+1. Handle any URGENT messages first
+2. Complete your assigned task
+3. When done, your output will be logged
+4. If you need to hand off work, use `tt assign`
+5. If blocked, describe what you need
 
-Begin work on your current task.
+Begin work.
 "#,
                     name = name,
                     town_name = config.name,
+                    urgent_section = urgent_section,
                     round = round,
                     max_rounds = max_rounds,
                     inbox_len = inbox_len,
+                    urgent_count = urgent_messages.len(),
                 );
 
                 // Write prompt to temp file
@@ -535,7 +591,8 @@ tt assign <agent> "<task description>"
 
 ### Send messages between agents
 ```bash
-tt send <agent> "message content"  # Send message to agent's inbox
+tt send <agent> "message"          # Send message to agent's inbox
+tt send <agent> --urgent "msg"     # URGENT: processed first next round
 tt inbox <agent>                   # Check agent's inbox
 ```
 

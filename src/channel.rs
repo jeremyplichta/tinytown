@@ -29,6 +29,9 @@ const TASK_PREFIX: &str = "mt:task:";
 /// Key prefix for agent activity logs
 const ACTIVITY_PREFIX: &str = "mt:activity:";
 
+/// Key prefix for urgent inbox
+const URGENT_PREFIX: &str = "mt:urgent:";
+
 /// TTL for activity logs (1 hour)
 const ACTIVITY_TTL_SECS: u64 = 3600;
 
@@ -69,6 +72,59 @@ impl Channel {
 
         debug!("Sent message {} to {}", message.id, message.to);
         Ok(())
+    }
+
+    /// Send an urgent message to an agent's priority inbox.
+    ///
+    /// Urgent messages are checked before regular inbox at the start of each round.
+    #[instrument(skip(self, message))]
+    pub async fn send_urgent(&self, message: &Message) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let urgent_key = format!("{}{}", URGENT_PREFIX, message.to);
+
+        let data = serde_json::to_string(message)?;
+        let _: () = conn.lpush(&urgent_key, &data).await?;
+
+        debug!("Sent URGENT message {} to {}", message.id, message.to);
+        Ok(())
+    }
+
+    /// Check and receive urgent messages (non-blocking).
+    ///
+    /// Returns all urgent messages, emptying the urgent inbox.
+    #[instrument(skip(self))]
+    pub async fn receive_urgent(&self, agent_id: AgentId) -> Result<Vec<Message>> {
+        let mut conn = self.conn.clone();
+        let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
+
+        let mut messages = Vec::new();
+        loop {
+            let result: Option<String> = conn.lpop(&urgent_key, None).await?;
+            match result {
+                Some(data) => {
+                    let message: Message = serde_json::from_str(&data)?;
+                    messages.push(message);
+                }
+                None => break,
+            }
+        }
+
+        if !messages.is_empty() {
+            debug!(
+                "Received {} urgent messages for {}",
+                messages.len(),
+                agent_id
+            );
+        }
+        Ok(messages)
+    }
+
+    /// Check urgent inbox length.
+    pub async fn urgent_len(&self, agent_id: AgentId) -> Result<usize> {
+        let mut conn = self.conn.clone();
+        let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
+        let len: usize = conn.llen(&urgent_key).await?;
+        Ok(len)
     }
 
     /// Receive a message from an agent's inbox (blocking with timeout).
