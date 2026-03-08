@@ -39,13 +39,20 @@ impl std::ops::Deref for TownGuard {
 
 /// Helper function to create a temporary town for testing.
 /// Returns a TownGuard that cleans up Redis when dropped.
+/// Uses TT_USE_SOCKET=1 to ensure tests use isolated per-town Redis instances.
 async fn create_test_town(name: &str) -> Result<TownGuard, Box<dyn std::error::Error>> {
+    // Force Unix socket mode for test isolation
+    // Safety: Tests are run serially via serial_test where this matters
+    unsafe {
+        std::env::set_var("TT_USE_SOCKET", "1");
+    }
+
     let temp_dir = TempDir::new()?;
     let town = Town::init(temp_dir.path(), name).await?;
     Ok(TownGuard { town, temp_dir })
 }
 
-/// Helper to kill Redis when test ends
+/// Helper to kill Redis when test ends (only for per-town Redis, not central)
 fn cleanup_redis(temp_dir: &TempDir) {
     let pid_file = temp_dir.path().join("redis.pid");
     if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
@@ -866,12 +873,15 @@ async fn test_plan_push_to_redis() -> Result<(), Box<dyn std::error::Error>> {
 /// Test that default_cli is used when spawning without --cli.
 #[tokio::test]
 async fn test_default_cli_config() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::GlobalConfig;
+
     let town = create_test_town("default-cli-test").await?;
 
-    // Config should have a default_cli
+    // Config should have a default_cli that matches global config
     let config = town.config();
+    let global = GlobalConfig::load().unwrap_or_default();
     assert!(!config.default_cli.is_empty());
-    assert_eq!(config.default_cli, "claude"); // Default is claude
+    assert_eq!(config.default_cli, global.default_cli); // Should match global config
 
     // Agent CLIs should include built-in presets
     assert!(config.agent_clis.contains_key("claude"));
@@ -1470,11 +1480,27 @@ async fn test_move_message_to_inbox() -> Result<(), Box<dyn std::error::Error>> 
 #[tokio::test]
 async fn test_redis_url_unix_socket() -> Result<(), Box<dyn std::error::Error>> {
     use tinytown::Config;
+    use tinytown::config::RedisConfig;
 
     let temp_dir = TempDir::new()?;
-    let config = Config::new("test-town", temp_dir.path());
+    let mut config = Config::new("test-town", temp_dir.path());
 
-    // Default config should use Unix socket
+    // Explicitly set Unix socket mode (may not be default if global config uses central Redis)
+    config.redis = RedisConfig {
+        use_socket: true,
+        socket_path: "redis.sock".to_string(),
+        host: "127.0.0.1".to_string(),
+        port: 6379,
+        persist: false,
+        aof_path: "redis.aof".to_string(),
+        password: None,
+        tls_enabled: false,
+        tls_cert: None,
+        tls_key: None,
+        tls_ca_cert: None,
+        bind: "127.0.0.1".to_string(),
+    };
+
     assert!(config.redis.use_socket);
     let url = config.redis_url();
     assert!(
