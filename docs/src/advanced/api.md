@@ -4,7 +4,7 @@ The Tinytown Rust API for programmatic control.
 
 ## Quick Links
 
-- [Full rustdoc](https://jeremyplichta.github.io/tinytown/tinytown/) — Complete API documentation
+- [Full rustdoc](https://redis-field-engineering.github.io/tinytown/tinytown/) — Complete API documentation
 
 ## Core Types
 
@@ -184,4 +184,3 @@ async fn main() -> Result<()> {
     Ok(())
 }
 ```
-

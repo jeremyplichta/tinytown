@@ -5,11 +5,11 @@
 [![Rust](https://img.shields.io/badge/Rust-1.85+-orange?logo=rust)](https://www.rust-lang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Redis](https://img.shields.io/badge/Redis-8.0+-red?logo=redis)](https://redis.io/downloads/)
-[![Docs](https://img.shields.io/badge/docs-mdBook-blue)](https://jeremyplichta.github.io/tinytown/)
+[![Docs](https://img.shields.io/badge/docs-mdBook-blue)](https://redis-field-engineering.github.io/tinytown/)
 
 *Named after [Tinytown, Colorado](https://en.wikipedia.org/wiki/Tiny_Town,_Colorado) — a miniature village with big charm.*
 
-📚 **[Read the Documentation](https://jeremyplichta.github.io/tinytown/)** | 🚀 **[Getting Started Guide](https://jeremyplichta.github.io/tinytown/getting-started/quickstart.html)** | 🔄 **[Coming from Gastown?](https://jeremyplichta.github.io/tinytown/gastown/migration.html)**
+📚 **[Read the Documentation](https://redis-field-engineering.github.io/tinytown/)** | 🚀 **[Getting Started Guide](https://redis-field-engineering.github.io/tinytown/getting-started/quickstart.html)** | 🔄 **[Coming from Gastown?](https://redis-field-engineering.github.io/tinytown/gastown/migration.html)**
 
 ## What is Tinytown?
 
