@@ -233,11 +233,12 @@ tt status    # Overview of town and agents
 tt list      # List all agents
 ```
 
-### Plan tasks (for complex work)
+### Plan and persist tasks
 ```bash
 tt plan --init              # Create tasks.toml for planning
 tt plan                     # View planned tasks
-tt sync push                # Send plan to Redis
+tt sync push                # Send tasks.toml to Redis
+tt sync pull                # Save Redis state to tasks.toml (for git)
 ```
 
 ## Your Role
@@ -267,6 +268,7 @@ This keeps decisions simple: workers work, reviewer approves, you coordinate.
 - Be specific: task descriptions should be clear and actionable
 - Be efficient: parallelize independent work across multiple agents
 - Check `tt status` frequently to monitor progress
+- **Save state to git**: Run `tt sync pull` periodically to save task state to tasks.toml, then suggest committing it
 
 ## Example Workflow
 
@@ -281,6 +283,8 @@ You:
 6. Monitor with `tt status`
 7. When backend is done: `tt assign reviewer "Review the auth API implementation. Check: security (password hashing, no secrets in logs), error handling, API consistency. Approve or list changes needed."`
 8. If reviewer approves → done! If not → assign fixes to backend, repeat.
+9. Save state: `tt sync pull` to save tasks to tasks.toml
+10. Suggest: "Run `git add tasks.toml && git commit -m 'Update task state'` to persist"
 
 Now, help the user orchestrate their project!
 "#,

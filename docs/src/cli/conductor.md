@@ -123,6 +123,7 @@ Always spawn a reviewer. They decide when work is done.
 2. Spawn workers + reviewer
 3. Assign work, then assign review
 4. Coordinate until reviewer approves
+5. Save state with `tt sync pull`, suggest git commit
 ```
 
 ## Comparison with `gt mayor attach`
