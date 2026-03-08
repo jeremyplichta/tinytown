@@ -27,8 +27,9 @@ Think of it as:
 | **Setup time** | 30 seconds | Hours |
 | **Config files** | 1 JSON | 10+ YAML files |
 | **Core concepts** | 5 types | 50+ concepts |
+| **CLI commands** | 13 | 50+ |
 | **Message latency** | <1ms (Unix socket) | 10-100ms |
-| **Lines of code** | ~1,000 | 50,000+ |
+| **Lines of code** | ~2,600 | 50,000+ |
 
 ## 🚀 Quick Start
 
