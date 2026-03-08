@@ -2,6 +2,8 @@
 
 Let's get a multi-agent workflow running in under 5 minutes.
 
+> **First time?** Make sure you've [installed Tinytown](./installation.md) first.
+
 ## Step 1: Initialize a Town
 
 A **Town** is your orchestration workspace. It manages Redis, agents, and message passing.
