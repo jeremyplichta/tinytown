@@ -5,6 +5,7 @@ on:
     branches: [master, main]
     paths:
       - "src/**"
+      - "docs/**"
       - "Cargo.toml"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
@@ -29,17 +30,28 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Build rustdoc
+      - name: Install mdBook
+        run: cargo install mdbook
+
+      - name: Build mdBook guide
+        run: mdbook build docs
+
+      - name: Build rustdoc API reference
         run: cargo doc --no-deps --all-features
 
-      - name: Add index redirect
+      - name: Combine documentation
         run: |
-          echo '<meta http-equiv="refresh" content="0; url=tinytown/index.html">' > target/doc/index.html
+          # mdBook builds to docs/book/
+          # rustdoc builds to target/doc/
+          # Put rustdoc under docs/book/api/
+          mkdir -p docs/book/api
+          cp -r target/doc/* docs/book/api/
+          echo '<meta http-equiv="refresh" content="0; url=tinytown/index.html">' > docs/book/api/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: target/doc
+          path: docs/book
 
   deploy:
     name: Deploy to GitHub Pages
