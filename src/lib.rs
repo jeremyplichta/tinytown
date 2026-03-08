@@ -62,4 +62,4 @@ pub use message::{ConfirmationType, Message, MessageId, MessageType, Priority};
 pub use plan::{TaskEntry, TasksFile, TasksMeta};
 pub use redis_manager::RedisManager;
 pub use task::{Task, TaskId, TaskState};
-pub use town::{Town, TT_DIR};
+pub use town::{TT_DIR, Town};
