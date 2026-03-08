@@ -20,6 +20,7 @@ use crate::agent::{Agent, AgentId, AgentState, AgentType};
 use crate::channel::Channel;
 use crate::config::Config;
 use crate::error::{Error, Result};
+use crate::global_config::GlobalConfig;
 use crate::message::{Message, MessageType};
 use crate::task::{Task, TaskId};
 
@@ -212,7 +213,27 @@ impl Town {
             return Ok(());
         }
 
-        let pid_file = config.root.join(REDIS_PID_FILE);
+        // Check if using central Redis mode
+        let is_central = config.is_central_redis();
+
+        // For central Redis, check if already running
+        if is_central && GlobalConfig::is_central_redis_running() {
+            debug!("Central Redis already running");
+            return Ok(());
+        }
+
+        // Determine PID file and working directory
+        let (pid_file, work_dir) = if is_central {
+            let global_dir = GlobalConfig::config_dir()?;
+            std::fs::create_dir_all(&global_dir)?;
+            (
+                GlobalConfig::redis_pid_path()?,
+                global_dir,
+            )
+        } else {
+            (config.root.join(REDIS_PID_FILE), config.root.clone())
+        };
+
         let redis_bin = find_redis_server();
 
         debug!("Using Redis binary: {}", redis_bin.display());
@@ -294,9 +315,15 @@ impl Town {
         }
 
         // Start Redis daemonized
+        if is_central {
+            info!(
+                "Starting central Redis on {}:{}",
+                config.redis.host, config.redis.port
+            );
+        }
         let status = std::process::Command::new(&redis_bin)
             .args(&args)
-            .current_dir(&config.root)
+            .current_dir(&work_dir)
             .status()?;
 
         if !status.success() {
