@@ -28,6 +28,9 @@ const AGENTS_DIR: &str = "agents";
 const LOGS_DIR: &str = "logs";
 const TASKS_DIR: &str = "tasks";
 
+/// Minimum required Redis version
+const MIN_REDIS_VERSION: (u32, u32) = (8, 0);
+
 /// The Town orchestrates agents and message passing.
 pub struct Town {
     config: Config,
@@ -39,23 +42,75 @@ pub struct Town {
 }
 
 impl Town {
+    /// Check that Redis is installed and meets minimum version requirements.
+    fn check_redis_version() -> Result<()> {
+        use std::process::Command as StdCommand;
+
+        // Check if redis-server is available
+        let output = StdCommand::new("redis-server")
+            .arg("--version")
+            .output()
+            .map_err(|_| Error::RedisNotInstalled)?;
+
+        if !output.status.success() {
+            return Err(Error::RedisNotInstalled);
+        }
+
+        let version_str = String::from_utf8_lossy(&output.stdout);
+
+        // Parse version from output like: "Redis server v=8.0.0 sha=..."
+        let version = Self::parse_redis_version(&version_str)?;
+
+        if version < MIN_REDIS_VERSION {
+            return Err(Error::RedisVersionTooOld(format!("{}.{}", version.0, version.1)));
+        }
+
+        info!("Redis version {}.{} detected ✓", version.0, version.1);
+        Ok(())
+    }
+
+    /// Parse Redis version from --version output.
+    fn parse_redis_version(version_str: &str) -> Result<(u32, u32)> {
+        // Format: "Redis server v=8.0.0 sha=..." or "Redis server v=7.2.4 sha=..."
+        let version_part = version_str
+            .split("v=")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .ok_or_else(|| Error::RedisVersionTooOld("unknown".to_string()))?;
+
+        let parts: Vec<&str> = version_part.split('.').collect();
+        if parts.len() < 2 {
+            return Err(Error::RedisVersionTooOld(version_part.to_string()));
+        }
+
+        let major = parts[0].parse::<u32>()
+            .map_err(|_| Error::RedisVersionTooOld(version_part.to_string()))?;
+        let minor = parts[1].parse::<u32>()
+            .map_err(|_| Error::RedisVersionTooOld(version_part.to_string()))?;
+
+        Ok((major, minor))
+    }
+
     /// Initialize a new town at the given path.
     pub async fn init(path: impl AsRef<Path>, name: impl Into<String>) -> Result<Self> {
         let path = path.as_ref();
         let name = name.into();
-        
+
+        // Check Redis version first
+        Self::check_redis_version()?;
+
         info!("Initializing town '{}' at {}", name, path.display());
-        
+
         // Create directory structure
         std::fs::create_dir_all(path)?;
         std::fs::create_dir_all(path.join(AGENTS_DIR))?;
         std::fs::create_dir_all(path.join(LOGS_DIR))?;
         std::fs::create_dir_all(path.join(TASKS_DIR))?;
-        
+
         // Create config
         let config = Config::new(&name, path);
         config.save()?;
-        
+
         // Start Redis and connect
         let redis_process = Self::start_redis(&config).await?;
         let channel = Self::connect_redis(&config).await?;
@@ -71,8 +126,11 @@ impl Town {
 
     /// Connect to an existing town.
     pub async fn connect(path: impl AsRef<Path>) -> Result<Self> {
+        // Check Redis version first
+        Self::check_redis_version()?;
+
         let config = Config::load(&path)?;
-        
+
         // Try to connect to Redis, start if needed
         let (channel, redis_process) = match Self::connect_redis(&config).await {
             Ok(ch) => (ch, None),

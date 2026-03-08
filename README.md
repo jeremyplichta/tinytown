@@ -164,6 +164,36 @@ If you need more, add it yourself in 10 lines.
 
 ## 📦 Installation
 
+### Prerequisites
+
+**Redis 8.0+** is required. Tinytown will check your Redis version on startup.
+
+#### macOS
+```bash
+brew install redis
+```
+
+#### Linux (Ubuntu/Debian)
+```bash
+# Add Redis repository and install
+curl -fsSL https://packages.redis.io/gpg | sudo gpg --dearmor -o /usr/share/keyrings/redis-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/redis-archive-keyring.gpg] https://packages.redis.io/deb $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/redis.list
+sudo apt-get update
+sudo apt-get install redis
+```
+
+#### From Source
+```bash
+# See https://redis.io/docs/latest/operate/oss_and_stack/install/install-redis/install-redis-from-source/
+curl -O https://download.redis.io/redis-stable.tar.gz
+tar xzf redis-stable.tar.gz
+cd redis-stable && make && sudo make install
+```
+
+For more options, see the [official Redis installation guide](https://redis.io/docs/latest/operate/oss_and_stack/install/).
+
+### Install Tinytown
+
 ```bash
 git clone https://github.com/jeremyplichta/tinytown.git
 cd tinytown
@@ -171,7 +201,7 @@ cargo build --release
 cargo install --path .
 ```
 
-**Requirements:** Rust 1.70+, Redis 7.0+
+**Requirements:** Rust 1.85+, Redis 8.0+
 
 ## 🔧 Development
 

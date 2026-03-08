@@ -50,6 +50,14 @@ pub enum Error {
     #[error("Redis not running. Start with 'tt start' or ensure Redis is available.")]
     RedisNotRunning,
 
+    /// Redis not installed
+    #[error("Redis not found. Please install Redis 8.0+ and ensure 'redis-server' is on your PATH.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/")]
+    RedisNotInstalled,
+
+    /// Redis version too old
+    #[error("Redis version {0} is too old. Tinytown requires Redis 8.0 or later.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/")]
+    RedisVersionTooOld(String),
+
     /// Timeout waiting for operation
     #[error("Operation timed out: {0}")]
     Timeout(String),
