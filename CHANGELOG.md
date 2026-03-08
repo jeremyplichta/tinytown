@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/jeremyplichta/tinytown/compare/v0.2.0...v0.3.0) (2026-03-08)
+
+
+### Features
+
+* add global config and rename model to cli ([c679481](https://github.com/jeremyplichta/tinytown/commit/c67948174903159518c33d23c1acf294f46831d8))
+* auto-detect Redis in ~/.tt/bin ([9b11fdf](https://github.com/jeremyplichta/tinytown/commit/9b11fdf559a2aa376b19f00ef94792e37c5b6109))
+
 ## [0.2.0](https://github.com/jeremyplichta/tinytown/compare/v0.1.0...v0.2.0) (2026-03-08)
 
 
