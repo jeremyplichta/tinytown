@@ -1,6 +1,6 @@
 # tt spawn
 
-Create a new agent.
+Create and start a new agent.
 
 ## Synopsis
 
@@ -10,7 +10,14 @@ tt spawn <NAME> [OPTIONS]
 
 ## Description
 
-Spawns a new worker agent in the town. The agent is registered in Redis and ready to receive tasks.
+Spawns a new worker agent in the town. **This actually starts an AI process!**
+
+The agent:
+1. Registers in Redis with state `Starting`
+2. Starts a background process (or foreground with `--foreground`)
+3. Runs in a loop, checking inbox for tasks
+4. Executes the AI model (claude, auggie, etc.) for each task
+5. Stops after `--max-rounds` iterations
 
 ## Arguments
 
@@ -22,7 +29,9 @@ Spawns a new worker agent in the town. The agent is registered in Redis and read
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--model <MODEL>` | `-m` | AI model to use (default: `claude`) |
+| `--model <MODEL>` | `-m` | AI model to use (uses `default_model` from config) |
+| `--max-rounds <N>` | | Maximum iterations before stopping (default: 10) |
+| `--foreground` | | Run in foreground instead of background |
 | `--town <PATH>` | `-t` | Town directory (default: `.`) |
 | `--verbose` | `-v` | Enable verbose logging |
 
@@ -40,26 +49,34 @@ Spawns a new worker agent in the town. The agent is registered in Redis and read
 
 ## Examples
 
-### Spawn with Default Model
+### Spawn in Background (Default)
 
 ```bash
 tt spawn worker-1
+# Agent runs in background, logs to logs/worker-1.log
 ```
 
-### Spawn with Specific Model
+### Spawn in Foreground (See Output)
 
 ```bash
-tt spawn backend --model auggie
-tt spawn reviewer --model codex
+tt spawn worker-1 --foreground
+# Agent runs in this terminal, you see all output
 ```
 
-### Spawn Multiple Agents
+### Limit Iterations
 
 ```bash
-tt spawn frontend --model claude
-tt spawn backend --model auggie
-tt spawn tester --model codex
-tt spawn reviewer --model claude
+tt spawn worker-1 --max-rounds 5
+# Agent stops after 5 rounds (default is 10)
+```
+
+### Spawn Multiple Agents (Parallel!)
+
+```bash
+tt spawn backend &
+tt spawn frontend &
+tt spawn tester &
+# All three run in parallel
 ```
 
 ## Output
@@ -67,7 +84,21 @@ tt spawn reviewer --model claude
 ```
 🤖 Spawned agent 'backend' using model 'auggie'
    ID: 550e8400-e29b-41d4-a716-446655440000
+🔄 Starting agent loop in background (max 10 rounds)...
+   Logs: ./logs/backend.log
+   Agent running in background. Check status with 'tt status'
 ```
+
+## What Happens
+
+1. **Agent registered** in Redis (`mt:agent:<id>`)
+2. **Background process** started running `tt agent-loop`
+3. **Agent loop**:
+   - Checks inbox for messages
+   - If messages: builds prompt, runs AI model
+   - Model output logged to `logs/<name>_round_<n>.log`
+   - Repeats until `--max-rounds` reached
+4. **Agent stops** with state `Stopped`
 
 ## Agent Naming
 

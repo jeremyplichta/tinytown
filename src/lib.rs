@@ -55,7 +55,7 @@ pub use agent::{Agent, AgentId, AgentState, AgentType};
 pub use channel::Channel;
 pub use config::Config;
 pub use error::{Error, Result};
-pub use message::{Message, MessageId, Priority};
+pub use message::{Message, MessageId, MessageType, Priority};
 pub use plan::{TaskEntry, TasksFile, TasksMeta};
 pub use task::{Task, TaskId, TaskState};
 pub use town::Town;

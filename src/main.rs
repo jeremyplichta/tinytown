@@ -46,6 +46,27 @@ enum Commands {
         /// Model to use (uses default_model from config if not specified)
         #[arg(short, long)]
         model: Option<String>,
+
+        /// Maximum rounds before agent stops (default: runs until done)
+        #[arg(long, default_value = "10")]
+        max_rounds: u32,
+
+        /// Run in foreground (don't background the process)
+        #[arg(long)]
+        foreground: bool,
+    },
+
+    /// Run agent loop (internal - called by spawn)
+    #[command(hide = true)]
+    AgentLoop {
+        /// Agent name
+        name: String,
+
+        /// Agent ID
+        id: String,
+
+        /// Maximum rounds
+        max_rounds: u32,
     },
 
     /// List all agents
@@ -68,6 +89,21 @@ enum Commands {
 
     /// Stop the town
     Stop,
+
+    /// Check an agent's inbox
+    Inbox {
+        /// Agent name
+        agent: String,
+    },
+
+    /// Send a message to an agent
+    Send {
+        /// Target agent name
+        to: String,
+
+        /// Message content
+        message: String,
+    },
 
     /// Start the conductor (interactive orchestration mode)
     Conductor,
@@ -118,12 +154,72 @@ async fn main() -> Result<()> {
             drop(town);
         }
 
-        Commands::Spawn { name, model } => {
+        Commands::Spawn {
+            name,
+            model,
+            max_rounds,
+            foreground,
+        } => {
             let town = Town::connect(&cli.town).await?;
             let model = model.unwrap_or_else(|| town.config().default_model.clone());
             let agent = town.spawn_agent(&name, &model).await?;
+            let agent_id = agent.id().to_string();
+
             info!("🤖 Spawned agent '{}' using model '{}'", name, model);
-            info!("   ID: {}", agent.id());
+            info!("   ID: {}", agent_id);
+
+            // Get the path to this executable
+            let exe = std::env::current_exe()?;
+            let town_path = cli.town.canonicalize().unwrap_or(cli.town.clone());
+
+            if foreground {
+                // Run agent loop in foreground
+                info!("🔄 Running agent loop (max {} rounds)...", max_rounds);
+                drop(town); // Release connection before running loop
+
+                let status = std::process::Command::new(&exe)
+                    .arg("--town")
+                    .arg(&town_path)
+                    .arg("agent-loop")
+                    .arg(&name)
+                    .arg(&agent_id)
+                    .arg(max_rounds.to_string())
+                    .stdin(std::process::Stdio::inherit())
+                    .stdout(std::process::Stdio::inherit())
+                    .stderr(std::process::Stdio::inherit())
+                    .status()?;
+
+                if status.success() {
+                    info!("✅ Agent '{}' completed", name);
+                } else {
+                    info!("❌ Agent '{}' exited with error", name);
+                }
+            } else {
+                // Background the agent process
+                info!(
+                    "🔄 Starting agent loop in background (max {} rounds)...",
+                    max_rounds
+                );
+                info!("   Logs: {}/logs/{}.log", town_path.display(), name);
+
+                let log_dir = town_path.join("logs");
+                std::fs::create_dir_all(&log_dir)?;
+                let log_file = std::fs::File::create(log_dir.join(format!("{}.log", name)))?;
+
+                std::process::Command::new(&exe)
+                    .arg("--town")
+                    .arg(&town_path)
+                    .arg("agent-loop")
+                    .arg(&name)
+                    .arg(&agent_id)
+                    .arg(max_rounds.to_string())
+                    .stdin(std::process::Stdio::null())
+                    .stdout(log_file.try_clone()?)
+                    .stderr(log_file)
+                    .spawn()?;
+
+                info!("   Agent running in background. Check status with 'tt status'");
+            }
         }
 
         Commands::List => {
@@ -182,6 +278,186 @@ async fn main() -> Result<()> {
             info!("👋 Town stopped (Redis will be cleaned up)");
         }
 
+        Commands::Inbox { agent } => {
+            let town = Town::connect(&cli.town).await?;
+            let handle = town.agent(&agent).await?;
+            let agent_id = handle.id();
+
+            // Check inbox length
+            let inbox_len = town.channel().inbox_len(agent_id).await?;
+            info!("📬 Inbox for '{}': {} messages", agent, inbox_len);
+
+            // Try to receive messages (non-blocking peek would be better, but for now show count)
+            if inbox_len > 0 {
+                info!("   Use the agent loop to process messages");
+            }
+        }
+
+        Commands::Send { to, message } => {
+            use tinytown::{AgentId, Message, MessageType};
+
+            let town = Town::connect(&cli.town).await?;
+            let to_handle = town.agent(&to).await?;
+            let to_id = to_handle.id();
+
+            // Create a custom message
+            let msg = Message::new(
+                AgentId::supervisor(), // From conductor/supervisor
+                to_id,
+                MessageType::Custom {
+                    kind: "task".to_string(),
+                    payload: message.clone(),
+                },
+            );
+
+            town.channel().send(&msg).await?;
+            info!("📤 Sent message to '{}': {}", to, message);
+        }
+
+        Commands::AgentLoop {
+            name,
+            id,
+            max_rounds,
+        } => {
+            // This is the actual agent worker loop
+            // It runs the AI model repeatedly, checking inbox for tasks
+
+            use std::time::Duration;
+            use tinytown::{AgentId, AgentState};
+
+            let town = Town::connect(&cli.town).await?;
+            let config = town.config();
+            let channel = town.channel();
+
+            // Parse agent ID
+            let agent_id: AgentId = id
+                .parse()
+                .map_err(|_| tinytown::Error::AgentNotFound(format!("Invalid agent ID: {}", id)))?;
+
+            // Get model command
+            let agent_state = channel.get_agent_state(agent_id).await?;
+            let model_name = agent_state
+                .as_ref()
+                .map(|a| a.model.clone())
+                .unwrap_or_else(|| config.default_model.clone());
+            let model_cmd = config
+                .models
+                .get(&model_name)
+                .map(|m| m.command.clone())
+                .unwrap_or_else(|| model_name.clone());
+
+            info!(
+                "🔄 Agent '{}' starting loop (max {} rounds)",
+                name, max_rounds
+            );
+            info!("   Model: {} ({})", model_name, model_cmd);
+
+            for round in 1..=max_rounds {
+                info!("\n📍 Round {}/{}", round, max_rounds);
+
+                // Check inbox for messages
+                let inbox_len = channel.inbox_len(agent_id).await?;
+                if inbox_len == 0 {
+                    info!("   📭 Inbox empty, waiting...");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    continue;
+                }
+
+                info!("   📬 {} messages in inbox", inbox_len);
+
+                // Build prompt with agent context
+                let prompt = format!(
+                    r#"# Agent: {name}
+
+You are agent "{name}" in Tinytown "{town_name}".
+
+## Your Task
+Check your inbox and complete any assigned tasks. Use the `tt` CLI:
+
+```bash
+tt status                    # Check town status
+tt list                      # List all agents
+tt assign <agent> "task"     # Send task to another agent (for handoffs)
+```
+
+## Current State
+- Round: {round}/{max_rounds}
+- Messages waiting: {inbox_len}
+
+## Instructions
+1. Complete your assigned task
+2. When done, your output will be logged
+3. If you need to hand off work, use `tt assign`
+4. If blocked, describe what you need
+
+Begin work on your current task.
+"#,
+                    name = name,
+                    town_name = config.name,
+                    round = round,
+                    max_rounds = max_rounds,
+                    inbox_len = inbox_len,
+                );
+
+                // Write prompt to temp file
+                let prompt_file = cli.town.join(format!(".agent_{}_prompt.md", name));
+                std::fs::write(&prompt_file, &prompt)?;
+
+                // Update agent state to working
+                if let Some(mut agent) = channel.get_agent_state(agent_id).await? {
+                    agent.state = AgentState::Working;
+                    channel.set_agent_state(&agent).await?;
+                }
+
+                // Run the AI model
+                info!("   🤖 Running {}...", model_name);
+                let output_file = cli.town.join(format!("logs/{}_round_{}.log", name, round));
+                let output = std::fs::File::create(&output_file)?;
+
+                let status = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("cat '{}' | {}", prompt_file.display(), model_cmd))
+                    .current_dir(&cli.town)
+                    .stdin(std::process::Stdio::null())
+                    .stdout(output.try_clone()?)
+                    .stderr(output)
+                    .status();
+
+                // Clean up prompt file
+                let _ = std::fs::remove_file(&prompt_file);
+
+                match status {
+                    Ok(s) if s.success() => {
+                        info!("   ✅ Round {} complete", round);
+                    }
+                    Ok(_) => {
+                        info!("   ⚠️ Model exited with error");
+                    }
+                    Err(e) => {
+                        info!("   ❌ Failed to run model: {}", e);
+                        break;
+                    }
+                }
+
+                // Update agent state back to idle
+                if let Some(mut agent) = channel.get_agent_state(agent_id).await? {
+                    agent.state = AgentState::Idle;
+                    channel.set_agent_state(&agent).await?;
+                }
+
+                // Small delay between rounds
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+
+            // Mark agent as stopped
+            if let Some(mut agent) = channel.get_agent_state(agent_id).await? {
+                agent.state = AgentState::Stopped;
+                channel.set_agent_state(&agent).await?;
+            }
+
+            info!("🏁 Agent '{}' finished after {} rounds", name, max_rounds);
+        }
+
         Commands::Conductor => {
             let town = Town::connect(&cli.town).await?;
             let config = town.config();
@@ -216,15 +492,22 @@ You are the **conductor** of Tinytown "{name}" - like the train conductor guidin
 
 You have access to the `tt` CLI tool. Run these commands in your shell to orchestrate:
 
-### Spawn agents
+### Spawn agents (starts actual AI process!)
 ```bash
-tt spawn <name>                    # Create agent with default model
-tt spawn <name> --model <model>    # Create with specific model (claude, auggie, codex)
+tt spawn <name>                    # Spawn agent with default model (backgrounds)
+tt spawn <name> --foreground       # Run in foreground (see output)
+tt spawn <name> --max-rounds 5     # Limit iterations (default: 10)
 ```
 
 ### Assign tasks
 ```bash
 tt assign <agent> "<task description>"
+```
+
+### Send messages between agents
+```bash
+tt send <agent> "message content"  # Send message to agent's inbox
+tt inbox <agent>                   # Check agent's inbox
 ```
 
 ### Check status

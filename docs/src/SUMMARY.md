@@ -32,6 +32,8 @@
 - [tt assign](./cli/assign.md)
 - [tt list](./cli/list.md)
 - [tt status](./cli/status.md)
+- [tt inbox](./cli/inbox.md)
+- [tt send](./cli/send.md)
 - [tt conductor](./cli/conductor.md)
 - [tt plan](./cli/plan.md)
 - [tt sync](./cli/sync.md)
