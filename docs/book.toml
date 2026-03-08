@@ -1,0 +1,19 @@
+[book]
+title = "Tinytown"
+authors = ["Jeremy Plichta"]
+language = "en"
+src = "src"
+description = "Simple multi-agent orchestration using Redis"
+
+[build]
+build-dir = "book"
+create-missing = true
+
+[output.html]
+git-repository-url = "https://github.com/jeremyplichta/tinytown"
+edit-url-template = "https://github.com/jeremyplichta/tinytown/edit/master/docs/{path}"
+default-theme = "rust"
+
+[output.html.fold]
+enable = true
+level = 1
