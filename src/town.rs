@@ -41,13 +41,29 @@ pub struct Town {
     redis_process: Option<Child>,
 }
 
+/// Find the redis-server binary, preferring ~/.tt/bin over PATH.
+fn find_redis_server() -> std::path::PathBuf {
+    // First, check ~/.tt/bin/redis-server (bootstrapped version)
+    if let Some(home) = dirs::home_dir() {
+        let tt_redis = home.join(".tt/bin/redis-server");
+        if tt_redis.exists() {
+            debug!("Using bootstrapped Redis: {}", tt_redis.display());
+            return tt_redis;
+        }
+    }
+    // Fall back to PATH
+    std::path::PathBuf::from("redis-server")
+}
+
 impl Town {
     /// Check that Redis is installed and meets minimum version requirements.
     fn check_redis_version() -> Result<()> {
         use std::process::Command as StdCommand;
 
+        let redis_bin = find_redis_server();
+
         // Check if redis-server is available
-        let output = StdCommand::new("redis-server")
+        let output = StdCommand::new(&redis_bin)
             .arg("--version")
             .output()
             .map_err(|_| Error::RedisNotInstalled)?;
@@ -159,6 +175,7 @@ impl Town {
     /// Start a local Redis server with Unix socket.
     async fn start_redis(config: &Config) -> Result<Child> {
         let socket_path = config.socket_path();
+        let redis_bin = find_redis_server();
 
         // Remove stale socket if exists
         if socket_path.exists() {
@@ -166,8 +183,9 @@ impl Town {
         }
 
         info!("Starting Redis with socket: {}", socket_path.display());
+        debug!("Using Redis binary: {}", redis_bin.display());
 
-        let child = Command::new("redis-server")
+        let child = Command::new(&redis_bin)
             .args([
                 "--unixsocket",
                 socket_path.to_str().unwrap(),
