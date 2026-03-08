@@ -107,19 +107,42 @@ impl Config {
     pub fn new(name: impl Into<String>, root: impl Into<PathBuf>) -> Self {
         let mut models = HashMap::new();
 
-        // Built-in model presets
+        // Built-in CLI presets with correct non-interactive flags
+        // These are agent CLIs, not models - they use their own default models internally
+
+        // Claude Code: --print for non-interactive, --dangerously-skip-permissions for full access
         models.insert(
             "claude".to_string(),
-            AgentModel::new("claude", "claude --print"),
+            AgentModel::new("claude", "claude --print --dangerously-skip-permissions"),
         );
+
+        // Auggie (Augment CLI): --print for non-interactive
+        models.insert(
+            "auggie".to_string(),
+            AgentModel::new("auggie", "auggie --print"),
+        );
+
+        // Codex: exec for non-interactive, --dangerously-bypass-approvals-and-sandbox for full access
+        models.insert(
+            "codex".to_string(),
+            AgentModel::new(
+                "codex",
+                "codex exec --dangerously-bypass-approvals-and-sandbox",
+            ),
+        );
+
+        // Aider: --yes for auto-confirm, --no-auto-commits to not auto-commit
+        models.insert(
+            "aider".to_string(),
+            AgentModel::new("aider", "aider --yes --no-auto-commits --message"),
+        );
+
+        // These may need updates when their CLIs are available/verified
         models.insert("gemini".to_string(), AgentModel::new("gemini", "gemini"));
-        models.insert("auggie".to_string(), AgentModel::new("auggie", "augment"));
-        models.insert("codex".to_string(), AgentModel::new("codex", "codex"));
         models.insert(
             "copilot".to_string(),
             AgentModel::new("copilot", "gh copilot"),
         );
-        models.insert("aider".to_string(), AgentModel::new("aider", "aider"));
         models.insert("cursor".to_string(), AgentModel::new("cursor", "cursor"));
 
         Self {

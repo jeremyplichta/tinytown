@@ -35,17 +35,19 @@ The agent:
 | `--town <PATH>` | `-t` | Town directory (default: `.`) |
 | `--verbose` | `-v` | Enable verbose logging |
 
-## Built-in Models
+## Built-in Agent CLIs
 
-| Model | Command | Description |
-|-------|---------|-------------|
-| `claude` | `claude --print` | Anthropic Claude |
-| `auggie` | `augment` | Augment Code |
-| `codex` | `codex` | OpenAI Codex |
-| `gemini` | `gemini` | Google Gemini |
-| `copilot` | `gh copilot` | GitHub Copilot |
-| `aider` | `aider` | Aider |
-| `cursor` | `cursor` | Cursor |
+| CLI | Command (non-interactive) |
+|-----|---------------------------|
+| `claude` | `claude --print --dangerously-skip-permissions` |
+| `auggie` | `auggie --print` |
+| `codex` | `codex exec --dangerously-bypass-approvals-and-sandbox` |
+| `aider` | `aider --yes --no-auto-commits --message` |
+| `gemini` | `gemini` |
+| `copilot` | `gh copilot` |
+| `cursor` | `cursor` |
+
+These are the CLI tools that run AI coding agents, not the underlying models.
 
 ## Examples
 

@@ -121,24 +121,24 @@ Tinytown is built on **5 core types**:
 | `tt start` | Start the town |
 | `tt stop` | Stop the town |
 
-## 🤖 Supported Models
+## 🤖 Supported Agent CLIs
 
-Built-in presets for popular AI coding agents:
+Built-in presets for popular AI coding agents (with correct non-interactive flags):
 
-| Model | Command |
-|-------|---------|
-| `claude` | `claude --print` |
-| `auggie` | `augment` |
-| `codex` | `codex` |
+| CLI | Command |
+|-----|---------|
+| `claude` | `claude --print --dangerously-skip-permissions` |
+| `auggie` | `auggie --print` |
+| `codex` | `codex exec --dangerously-bypass-approvals-and-sandbox` |
+| `aider` | `aider --yes --no-auto-commits --message` |
 | `gemini` | `gemini` |
 | `copilot` | `gh copilot` |
-| `aider` | `aider` |
 | `cursor` | `cursor` |
 
 ```bash
-# Spawn uses default_model from config (or specify with --model)
+# Spawn uses default CLI from config (or override)
 tt spawn worker-1
-tt spawn worker-2 --model auggie  # Override default
+tt spawn worker-2 --model auggie
 tt spawn worker-3 --model codex
 ```
 
