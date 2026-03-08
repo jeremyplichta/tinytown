@@ -65,31 +65,6 @@ That's it! Your agents are now coordinating via Redis.
 
 > **Note:** `tt bootstrap` delegates to an AI agent to download Redis from GitHub and compile it for your machine. Alternatively: `brew install redis` (macOS) or `apt install redis-server` (Ubuntu).
 
-## 💻 Code Example
-
-```rust
-use tinytown::{Town, Task, Result};
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    // Connect to town (auto-starts Redis if needed)
-    let town = Town::connect("./mytown").await?;
-    
-    // Spawn an agent
-    let agent = town.spawn_agent("worker-1", "claude").await?;
-    
-    // Assign a task
-    let task = Task::new("Implement the new API endpoint");
-    agent.assign(task).await?;
-    
-    // Wait for completion
-    agent.wait().await?;
-    
-    println!("✅ Task completed!");
-    Ok(())
-}
-```
-
 ## 🏗️ Architecture
 
 Tinytown is built on **5 core types**:
