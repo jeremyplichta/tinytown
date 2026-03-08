@@ -1,0 +1,60 @@
+/*
+ * Copyright (c) 2024-Present, Jeremy Plichta
+ * Licensed under the MIT License
+ */
+
+//! # Tinytown
+//!
+//! A simple, fast multi-agent orchestration system using Redis for message passing.
+//!
+//! Tinytown takes the best ideas from complex orchestration systems and distills them
+//! into a minimal, fast, and easy-to-use library. It uses Redis with Unix socket
+//! communication for blazing-fast local message passing between agents.
+//!
+//! ## Key Features
+//!
+//! - **Simple**: 5 core types, 1 config file, 3 commands
+//! - **Fast**: Redis with Unix socket for sub-millisecond message passing
+//! - **Reliable**: Agents persist work in git worktrees, survive crashes
+//! - **Observable**: Built-in activity logging and status monitoring
+//!
+//! ## Quick Example
+//!
+//! ```no_run
+//! use tinytown::{Town, Agent, Task, Result};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<()> {
+//!     // Connect to town (auto-starts Redis if needed)
+//!     let town = Town::connect("./mytown").await?;
+//!
+//!     // Create an agent
+//!     let agent = town.spawn_agent("worker-1", "claude").await?;
+//!
+//!     // Assign a task
+//!     let task = Task::new("Fix the bug in auth.rs");
+//!     agent.assign(task).await?;
+//!
+//!     // Wait for completion
+//!     agent.wait().await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+
+pub mod agent;
+pub mod channel;
+pub mod config;
+pub mod error;
+pub mod message;
+pub mod task;
+pub mod town;
+
+pub use agent::{Agent, AgentId, AgentState, AgentType};
+pub use channel::Channel;
+pub use config::Config;
+pub use error::{Error, Result};
+pub use message::{Message, MessageId, Priority};
+pub use task::{Task, TaskId, TaskState};
+pub use town::Town;
+

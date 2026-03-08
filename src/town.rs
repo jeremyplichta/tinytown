@@ -1,0 +1,270 @@
+/*
+ * Copyright (c) 2024-Present, Jeremy Plichta
+ * Licensed under the MIT License
+ */
+
+//! Town - the central orchestration hub.
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::Arc;
+
+use redis::aio::ConnectionManager;
+use redis::Client;
+use tokio::process::{Child, Command};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
+
+use crate::agent::{Agent, AgentId, AgentState, AgentType};
+use crate::channel::Channel;
+use crate::config::Config;
+use crate::error::{Error, Result};
+use crate::message::{Message, MessageType};
+use crate::task::{Task, TaskId};
+
+/// Town directory structure
+const AGENTS_DIR: &str = "agents";
+const LOGS_DIR: &str = "logs";
+const TASKS_DIR: &str = "tasks";
+
+/// The Town orchestrates agents and message passing.
+pub struct Town {
+    config: Config,
+    channel: Channel,
+    agents: Arc<RwLock<HashMap<AgentId, Agent>>>,
+    #[expect(dead_code)]
+    processes: Arc<RwLock<HashMap<AgentId, Child>>>,
+    redis_process: Option<Child>,
+}
+
+impl Town {
+    /// Initialize a new town at the given path.
+    pub async fn init(path: impl AsRef<Path>, name: impl Into<String>) -> Result<Self> {
+        let path = path.as_ref();
+        let name = name.into();
+        
+        info!("Initializing town '{}' at {}", name, path.display());
+        
+        // Create directory structure
+        std::fs::create_dir_all(path)?;
+        std::fs::create_dir_all(path.join(AGENTS_DIR))?;
+        std::fs::create_dir_all(path.join(LOGS_DIR))?;
+        std::fs::create_dir_all(path.join(TASKS_DIR))?;
+        
+        // Create config
+        let config = Config::new(&name, path);
+        config.save()?;
+        
+        // Start Redis and connect
+        let redis_process = Self::start_redis(&config).await?;
+        let channel = Self::connect_redis(&config).await?;
+        
+        Ok(Self {
+            config,
+            channel,
+            agents: Arc::new(RwLock::new(HashMap::new())),
+            processes: Arc::new(RwLock::new(HashMap::new())),
+            redis_process: Some(redis_process),
+        })
+    }
+
+    /// Connect to an existing town.
+    pub async fn connect(path: impl AsRef<Path>) -> Result<Self> {
+        let config = Config::load(&path)?;
+        
+        // Try to connect to Redis, start if needed
+        let (channel, redis_process) = match Self::connect_redis(&config).await {
+            Ok(ch) => (ch, None),
+            Err(_) => {
+                warn!("Redis not running, starting...");
+                let proc = Self::start_redis(&config).await?;
+                let ch = Self::connect_redis(&config).await?;
+                (ch, Some(proc))
+            }
+        };
+        
+        Ok(Self {
+            config,
+            channel,
+            agents: Arc::new(RwLock::new(HashMap::new())),
+            processes: Arc::new(RwLock::new(HashMap::new())),
+            redis_process,
+        })
+    }
+
+    /// Start a local Redis server with Unix socket.
+    async fn start_redis(config: &Config) -> Result<Child> {
+        let socket_path = config.socket_path();
+        
+        // Remove stale socket if exists
+        if socket_path.exists() {
+            std::fs::remove_file(&socket_path)?;
+        }
+        
+        info!("Starting Redis with socket: {}", socket_path.display());
+        
+        let child = Command::new("redis-server")
+            .args([
+                "--unixsocket", socket_path.to_str().unwrap(),
+                "--unixsocketperm", "700",
+                "--port", "0",  // Disable TCP
+                "--daemonize", "no",
+                "--loglevel", "warning",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;
+        
+        // Wait for socket to be ready
+        for _ in 0..50 {
+            if socket_path.exists() {
+                debug!("Redis socket ready");
+                return Ok(child);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        
+        Err(Error::Timeout("Redis failed to start".into()))
+    }
+
+    /// Connect to Redis.
+    async fn connect_redis(config: &Config) -> Result<Channel> {
+        let url = config.redis_url();
+        debug!("Connecting to Redis: {}", url);
+        
+        let client = Client::open(url)?;
+        let conn = ConnectionManager::new(client).await?;
+        
+        Ok(Channel::new(conn))
+    }
+
+    /// Spawn a new worker agent.
+    pub async fn spawn_agent(&self, name: &str, model: &str) -> Result<AgentHandle> {
+        let agent = Agent::new(name, model, AgentType::Worker);
+        let id = agent.id;
+        
+        // Store agent state
+        self.channel.set_agent_state(&agent).await?;
+        self.agents.write().await.insert(id, agent);
+        
+        info!("Spawned agent '{}' ({})", name, id);
+        
+        Ok(AgentHandle {
+            id,
+            channel: self.channel.clone(),
+        })
+    }
+
+    /// Get a handle to an existing agent.
+    pub async fn agent(&self, name: &str) -> Result<AgentHandle> {
+        let agents = self.agents.read().await;
+        for (id, agent) in agents.iter() {
+            if agent.name == name {
+                return Ok(AgentHandle {
+                    id: *id,
+                    channel: self.channel.clone(),
+                });
+            }
+        }
+        Err(Error::AgentNotFound(name.to_string()))
+    }
+
+    /// List all agents.
+    pub async fn list_agents(&self) -> Vec<Agent> {
+        self.agents.read().await.values().cloned().collect()
+    }
+
+    /// Get the communication channel.
+    pub fn channel(&self) -> &Channel {
+        &self.channel
+    }
+
+    /// Get the town configuration.
+    pub fn config(&self) -> &Config {
+        &self.config
+    }
+
+    /// Get the town root directory.
+    pub fn root(&self) -> &Path {
+        &self.config.root
+    }
+}
+
+impl Drop for Town {
+    fn drop(&mut self) {
+        // Clean up Redis process if we started it
+        if let Some(mut proc) = self.redis_process.take() {
+            let _ = proc.start_kill();
+        }
+    }
+}
+
+/// Handle for interacting with an agent.
+#[derive(Clone)]
+pub struct AgentHandle {
+    id: AgentId,
+    channel: Channel,
+}
+
+impl AgentHandle {
+    /// Get the agent ID.
+    pub fn id(&self) -> AgentId {
+        self.id
+    }
+
+    /// Assign a task to this agent.
+    pub async fn assign(&self, task: Task) -> Result<TaskId> {
+        let task_id = task.id;
+
+        // Store task
+        self.channel.set_task(&task).await?;
+
+        // Send assignment message
+        let msg = Message::new(
+            AgentId::supervisor(),
+            self.id,
+            MessageType::TaskAssign { task_id: task_id.to_string() },
+        );
+        self.channel.send(&msg).await?;
+
+        Ok(task_id)
+    }
+
+    /// Send a message to this agent.
+    pub async fn send(&self, msg_type: MessageType) -> Result<()> {
+        let msg = Message::new(AgentId::supervisor(), self.id, msg_type);
+        self.channel.send(&msg).await
+    }
+
+    /// Check agent's inbox length.
+    pub async fn inbox_len(&self) -> Result<usize> {
+        self.channel.inbox_len(self.id).await
+    }
+
+    /// Get agent state.
+    pub async fn state(&self) -> Result<Option<Agent>> {
+        self.channel.get_agent_state(self.id).await
+    }
+
+    /// Wait for agent to complete current task.
+    pub async fn wait(&self) -> Result<()> {
+        // Poll until agent is idle or error
+        loop {
+            if let Some(agent) = self.state().await? {
+                match agent.state {
+                    AgentState::Idle | AgentState::Stopped => return Ok(()),
+                    AgentState::Error => {
+                        return Err(Error::AgentNotFound(format!(
+                            "Agent {} in error state",
+                            self.id
+                        )));
+                    }
+                    _ => {}
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+    }
+}
+

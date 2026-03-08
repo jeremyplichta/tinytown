@@ -1,0 +1,17 @@
+# Build artifacts
+/target
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Runtime
+redis.sock
+*.rdb
+tinytown.json
+
+# OS
+.DS_Store
+Thumbs.db
