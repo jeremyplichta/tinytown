@@ -32,6 +32,9 @@ const ACTIVITY_PREFIX: &str = "mt:activity:";
 /// Key prefix for urgent inbox
 const URGENT_PREFIX: &str = "mt:urgent:";
 
+/// Key prefix for stop flags
+const STOP_PREFIX: &str = "mt:stop:";
+
 /// TTL for activity logs (1 hour)
 const ACTIVITY_TTL_SECS: u64 = 3600;
 
@@ -125,6 +128,40 @@ impl Channel {
         let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
         let len: usize = conn.llen(&urgent_key).await?;
         Ok(len)
+    }
+
+    /// Request an agent to stop gracefully.
+    ///
+    /// Sets a stop flag that the agent checks at the start of each round.
+    #[instrument(skip(self))]
+    pub async fn request_stop(&self, agent_id: AgentId) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+
+        // Set flag with 1-hour TTL (cleanup if agent already dead)
+        let _: () = conn.set_ex(&stop_key, "1", 3600).await?;
+
+        debug!("Requested stop for agent {}", agent_id);
+        Ok(())
+    }
+
+    /// Check if stop has been requested for an agent.
+    #[instrument(skip(self))]
+    pub async fn should_stop(&self, agent_id: AgentId) -> Result<bool> {
+        let mut conn = self.conn.clone();
+        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+
+        let exists: bool = conn.exists(&stop_key).await?;
+        Ok(exists)
+    }
+
+    /// Clear the stop flag (called when agent stops).
+    pub async fn clear_stop(&self, agent_id: AgentId) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+
+        let _: () = conn.del(&stop_key).await?;
+        Ok(())
     }
 
     /// Receive a message from an agent's inbox (blocking with timeout).

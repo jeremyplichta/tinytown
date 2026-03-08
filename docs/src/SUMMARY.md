@@ -34,6 +34,7 @@
 - [tt status](./cli/status.md)
 - [tt inbox](./cli/inbox.md)
 - [tt send](./cli/send.md)
+- [tt kill](./cli/kill.md)
 - [tt conductor](./cli/conductor.md)
 - [tt plan](./cli/plan.md)
 - [tt sync](./cli/sync.md)

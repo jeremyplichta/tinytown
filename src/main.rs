@@ -94,6 +94,12 @@ enum Commands {
     /// Stop the town
     Stop,
 
+    /// Stop a specific agent gracefully
+    Kill {
+        /// Agent name to stop
+        agent: String,
+    },
+
     /// Check an agent's inbox
     Inbox {
         /// Agent name
@@ -287,6 +293,31 @@ async fn main() -> Result<()> {
             }
         }
 
+        Commands::Kill { agent } => {
+            use tinytown::AgentState;
+
+            let town = Town::connect(&cli.town).await?;
+            let handle = town.agent(&agent).await?;
+            let agent_id = handle.id();
+
+            // Request the agent to stop
+            town.channel().request_stop(agent_id).await?;
+
+            // Update state to show it's stopping
+            if let Some(mut agent_state) = town.channel().get_agent_state(agent_id).await? {
+                agent_state.state = AgentState::Stopped;
+                town.channel().set_agent_state(&agent_state).await?;
+            }
+
+            // Log activity
+            town.channel()
+                .log_agent_activity(agent_id, "🛑 Stop requested by user")
+                .await?;
+
+            info!("🛑 Requested stop for agent '{}'", agent);
+            info!("   Agent will stop at the start of its next round.");
+        }
+
         Commands::Start => {
             let _town = Town::connect(&cli.town).await?;
             info!("🚀 Town started");
@@ -390,6 +421,19 @@ async fn main() -> Result<()> {
 
             for round in 1..=max_rounds {
                 info!("\n📍 Round {}/{}", round, max_rounds);
+
+                // Check if stop has been requested
+                if channel.should_stop(agent_id).await? {
+                    info!("   🛑 Stop requested, exiting gracefully...");
+                    channel
+                        .log_agent_activity(
+                            agent_id,
+                            &format!("Round {}: 🛑 stopped by request", round),
+                        )
+                        .await?;
+                    channel.clear_stop(agent_id).await?;
+                    break;
+                }
 
                 // Check URGENT inbox first (priority messages)
                 let urgent_messages = channel.receive_urgent(agent_id).await?;
@@ -621,6 +665,11 @@ tt status --deep  # Deep status with recent agent activity
 tt list           # List all agents
 ```
 
+### Stop agents
+```bash
+tt kill <agent>   # Request agent to stop gracefully (at start of next round)
+```
+
 ### Plan and persist tasks
 ```bash
 tt plan --init              # Create tasks.toml for planning
@@ -635,9 +684,10 @@ tt sync pull                # Save Redis state to tasks.toml (for git)
 2. **Break down** complex requests into discrete tasks
 3. **Spawn** appropriate agents including a **reviewer** for quality control
 4. **Assign** tasks to agents with clear, actionable descriptions
-5. **Monitor** progress with `tt status`
+5. **Monitor** progress with `tt status` (use `--deep` to see recent activity)
 6. **Coordinate** handoffs between agents
 7. **Check with reviewer** to decide when work is complete
+8. **Cleanup**: When done, stop agents with `tt kill <agent>`
 
 ## The Reviewer Pattern
 
