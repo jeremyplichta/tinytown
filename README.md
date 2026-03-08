@@ -67,34 +67,35 @@ That's it! Your agents are now coordinating via Redis.
 
 ## 🏗️ Architecture
 
-Tinytown is built on **5 core types**:
+Tinytown is built on **6 core concepts**:
 
-| Type | Purpose |
-|------|---------|
-| **Town** 🏘️ | Central orchestration hub, manages Redis & agents |
-| **Agent** 🤖 | Workers that execute tasks (Claude, Auggie, Codex, Gemini, Copilot, Aider, Cursor, or custom) |
+| Concept | Purpose |
+|---------|---------|
+| **Conductor** 🚂 | AI orchestrator that manages agents and assigns tasks |
+| **Town** 🏘️ | Project workspace with Redis state and agent registry |
+| **Agent** 🤖 | AI workers (Claude, Auggie, Codex, Gemini, Copilot, Aider, Cursor) |
 | **Task** 📋 | Units of work with state tracking |
 | **Message** 💬 | Inter-agent communication with priorities |
 | **Channel** 📡 | Redis-based message passing (<1ms latency) |
 
 ```
-┌─────────────────────────────────────────┐
-│           Your Application              │
-└──────────────┬──────────────────────────┘
-               │
-        ┌──────▼───────┐
-        │    Town      │  (Orchestrator)
-        └──────┬───────┘
-               │
-        ┌──────▼──────────────────┐
+        ┌─────────────────┐
+        │   Conductor 🚂  │  (You talk to this)
+        └────────┬────────┘
+                 │ spawns, assigns, coordinates
+        ┌────────▼────────┐
+        │    Town 🏘️     │
+        └────────┬────────┘
+                 │
+        ┌────────▼────────────────┐
         │   Redis (Unix Socket)   │  <1ms latency
-        └──────┬──────────────────┘
-               │
-    ┌──────────┼──────────────┐
-    ▼          ▼              ▼
-┌────────┐ ┌────────┐    ┌────────┐
-│ Agent1 │ │ Agent2 │ .. │ AgentN │
-└────────┘ └────────┘    └────────┘
+        └────────┬────────────────┘
+                 │
+    ┌────────────┼────────────┐
+    ▼            ▼            ▼
+┌────────┐  ┌────────┐   ┌────────┐
+│ Agent1 │  │ Agent2 │ … │ AgentN │
+└────────┘  └────────┘   └────────┘
 ```
 
 ## 🎮 CLI Commands
