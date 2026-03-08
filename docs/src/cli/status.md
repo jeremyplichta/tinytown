@@ -43,7 +43,7 @@ Output:
    reviewer (Idle) - 1 messages pending
 ```
 
-### Deep Status (with activity)
+### Deep Status (with stats and activity)
 
 ```bash
 tt status --deep
@@ -55,18 +55,25 @@ Output:
 📂 Root: /Users/you/projects/my-project
 📡 Redis: unix:///Users/you/projects/my-project/redis.sock
 🤖 Agents: 3
-   backend (Working) - 0 messages pending
-      └─ Round 3: ✅ completed
-      └─ Round 2: ✅ completed
-      └─ Round 1: ✅ completed
-   frontend (Idle) - 2 messages pending
+   backend (Working) - 0 pending, 12 rounds, uptime 1h 23m
+      └─ Round 12: ✅ completed
+      └─ Round 11: ✅ completed
+   frontend (Idle) - 2 pending, 5 rounds, uptime 45m 12s
       └─ Round 5: ✅ completed
-   reviewer (Idle) - 1 messages pending
+   reviewer (Idle) - 1 pending, 2 rounds, uptime 30m 5s
       └─ Round 2: ⚠️ model error
 
-📊 Deep status shows last activity from each agent.
-   Activity is stored in Redis with 1-hour TTL.
+📊 Stats: rounds completed, uptime since spawn
 ```
+
+## Stats Shown
+
+| Stat | Description |
+|------|-------------|
+| **Rounds** | Number of agent loop iterations completed |
+| **Uptime** | Time since agent was spawned |
+| **Pending** | Messages waiting in inbox |
+| **Activity** | Recent round results (last 5) |
 
 ## Output Fields
 

@@ -277,25 +277,39 @@ async fn main() -> Result<()> {
 
             for agent in agents {
                 let inbox_len = town.channel().inbox_len(agent.id).await.unwrap_or(0);
-                info!(
-                    "   {} ({:?}) - {} messages pending",
-                    agent.name, agent.state, inbox_len
-                );
+
+                // Calculate uptime
+                let uptime = chrono::Utc::now() - agent.created_at;
+                let uptime_str = if uptime.num_hours() > 0 {
+                    format!("{}h {}m", uptime.num_hours(), uptime.num_minutes() % 60)
+                } else if uptime.num_minutes() > 0 {
+                    format!("{}m {}s", uptime.num_minutes(), uptime.num_seconds() % 60)
+                } else {
+                    format!("{}s", uptime.num_seconds())
+                };
 
                 if deep {
+                    info!(
+                        "   {} ({:?}) - {} pending, {} rounds, uptime {}",
+                        agent.name, agent.state, inbox_len, agent.rounds_completed, uptime_str
+                    );
                     // Get recent activity from Redis
                     if let Ok(Some(activity)) = town.channel().get_agent_activity(agent.id).await {
                         for line in activity.lines().take(5) {
                             info!("      └─ {}", line);
                         }
                     }
+                } else {
+                    info!(
+                        "   {} ({:?}) - {} pending",
+                        agent.name, agent.state, inbox_len
+                    );
                 }
             }
 
             if deep {
                 info!("");
-                info!("📊 Deep status shows last activity from each agent.");
-                info!("   Activity is stored in Redis with 1-hour TTL.");
+                info!("📊 Stats: rounds completed, uptime since spawn");
             }
         }
 
@@ -592,9 +606,11 @@ Begin work. Check your inbox and keep working until it's empty.
                     break;
                 }
 
-                // Update agent state back to idle
+                // Update agent state back to idle and increment stats
                 if let Some(mut agent) = channel.get_agent_state(agent_id).await? {
                     agent.state = AgentState::Idle;
+                    agent.rounds_completed += 1;
+                    agent.last_heartbeat = chrono::Utc::now();
                     channel.set_agent_state(&agent).await?;
                 }
 
@@ -602,13 +618,18 @@ Begin work. Check your inbox and keep working until it's empty.
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
 
-            // Mark agent as stopped
+            // Mark agent as stopped with final stats
             if let Some(mut agent) = channel.get_agent_state(agent_id).await? {
                 agent.state = AgentState::Stopped;
+                agent.last_heartbeat = chrono::Utc::now();
                 channel.set_agent_state(&agent).await?;
+                info!(
+                    "🏁 Agent '{}' finished: {} rounds, {} tasks",
+                    name, agent.rounds_completed, agent.tasks_completed
+                );
+            } else {
+                info!("🏁 Agent '{}' finished after {} rounds", name, max_rounds);
             }
-
-            info!("🏁 Agent '{}' finished after {} rounds", name, max_rounds);
         }
 
         Commands::Conductor => {
@@ -664,10 +685,10 @@ tt send <agent> --urgent "msg"     # URGENT: processed first next round
 tt inbox <agent>                   # Check agent's inbox
 ```
 
-### Check status
+### Check status and stats
 ```bash
 tt status         # Overview of town and agents
-tt status --deep  # Deep status with recent agent activity
+tt status --deep  # Stats: rounds completed, uptime, recent activity
 tt list           # List all agents
 ```
 
@@ -691,7 +712,7 @@ tt save                     # Save Redis AOF snapshot (for version control)
 2. **Break down** complex requests into discrete tasks
 3. **Spawn** appropriate agents including a **reviewer** for quality control
 4. **Assign** tasks to agents with clear, actionable descriptions
-5. **Monitor** progress with `tt status` (use `--deep` to see recent activity)
+5. **Monitor** progress with `tt status --deep` (shows rounds, uptime, activity)
 6. **Coordinate** handoffs between agents
 7. **Check with reviewer** to decide when work is complete
 8. **Cleanup**: When done, stop agents with `tt kill <agent>`

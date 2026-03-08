@@ -149,6 +149,9 @@ pub struct Agent {
     pub last_heartbeat: DateTime<Utc>,
     /// Number of tasks completed
     pub tasks_completed: u64,
+    /// Number of rounds completed
+    #[serde(default)]
+    pub rounds_completed: u64,
 }
 
 impl Agent {
@@ -166,6 +169,7 @@ impl Agent {
             created_at: now,
             last_heartbeat: now,
             tasks_completed: 0,
+            rounds_completed: 0,
         }
     }
 
@@ -183,6 +187,7 @@ impl Agent {
             created_at: now,
             last_heartbeat: now,
             tasks_completed: 0,
+            rounds_completed: 0,
         }
     }
 }
