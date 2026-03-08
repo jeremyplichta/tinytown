@@ -36,11 +36,14 @@ Think of it as:
 # 1. Initialize a new town
 tt init --name my-town
 
-# 2. Spawn an agent
-tt spawn worker-1 --model claude
+# 2. Spawn an agent (uses default_model from config)
+tt spawn worker-1
 
 # 3. Assign a task
 tt assign worker-1 "Fix the bug in auth.rs"
+
+# 4. Or use the conductor for interactive mode
+tt conductor
 ```
 
 That's it! Your agents are now coordinating via Redis.
@@ -107,10 +110,13 @@ Tinytown is built on **5 core types**:
 | Command | Description |
 |---------|-------------|
 | `tt init` | Initialize a new town |
-| `tt spawn <name>` | Create a new agent |
+| `tt spawn <name>` | Create a new agent (uses default model) |
 | `tt assign <agent> <task>` | Assign a task |
 | `tt list` | List all agents |
 | `tt status` | Show town status |
+| `tt conductor` | 🚂 Interactive orchestration mode |
+| `tt plan --init` | Create tasks.toml for planning |
+| `tt sync push` | Push tasks.toml to Redis |
 | `tt start` | Start the town |
 | `tt stop` | Stop the town |
 
@@ -129,9 +135,9 @@ Built-in presets for popular AI coding agents:
 | `cursor` | `cursor` |
 
 ```bash
-# Use any built-in model
-tt spawn worker-1 --model claude
-tt spawn worker-2 --model auggie
+# Spawn uses default_model from config (or specify with --model)
+tt spawn worker-1
+tt spawn worker-2 --model auggie  # Override default
 tt spawn worker-3 --model codex
 ```
 

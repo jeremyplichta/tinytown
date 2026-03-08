@@ -47,6 +47,7 @@ pub mod channel;
 pub mod config;
 pub mod error;
 pub mod message;
+pub mod plan;
 pub mod task;
 pub mod town;
 
@@ -55,5 +56,6 @@ pub use channel::Channel;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use message::{Message, MessageId, Priority};
+pub use plan::{TaskEntry, TasksFile, TasksMeta};
 pub use task::{Task, TaskId, TaskState};
 pub use town::Town;
