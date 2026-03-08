@@ -16,6 +16,7 @@
 - [Tasks](./concepts/tasks.md)
 - [Messages](./concepts/messages.md)
 - [Channels](./concepts/channels.md)
+- [Coordination](./concepts/coordination.md)
 
 # Tutorials
 

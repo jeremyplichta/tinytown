@@ -78,6 +78,25 @@ Current status:
 - tester (Idle) - will write tests after implementation
 ```
 
+## The Reviewer Pattern
+
+The conductor always spawns a **reviewer** agent. This creates a simple completion protocol:
+
+```
+Worker completes task
+       ↓
+Conductor assigns review task to reviewer
+       ↓
+Reviewer checks work → approves or requests changes
+       ↓
+Conductor marks complete or assigns fixes
+```
+
+This keeps it simple:
+- **Workers** do the work
+- **Reviewer** decides if it's done
+- **Conductor** coordinates everything
+
 ## The Conductor's Context
 
 The conductor receives a markdown context file that includes:
@@ -88,20 +107,22 @@ The conductor receives a markdown context file that includes:
 You are the **conductor** of Tinytown "my-project"...
 
 ## Current Town State
-- Agents: architect (Idle), backend (Idle)
-- Tasks pending: 0
+- Agents: backend (Working), reviewer (Idle)
+- Tasks pending: 1
 
 ## Your Capabilities
 - tt spawn <name> - Create agents
 - tt assign <agent> "task" - Assign work
 - tt status - Check progress
-- tt plan --init - Create task plan
+
+## The Reviewer Pattern
+Always spawn a reviewer. They decide when work is done.
 
 ## Your Role
 1. Break down user requests into tasks
-2. Spawn appropriate agents
-3. Assign work with clear descriptions
-4. Monitor and coordinate
+2. Spawn workers + reviewer
+3. Assign work, then assign review
+4. Coordinate until reviewer approves
 ```
 
 ## Comparison with `gt mayor attach`
