@@ -42,8 +42,9 @@ tt spawn worker-1
 # 3. Assign a task
 tt assign worker-1 "Fix the bug in auth.rs"
 
-# 4. Or use the conductor for interactive mode
+# 4. Or use the conductor - an AI that orchestrates for you
 tt conductor
+# Conductor: "I'll spawn agents and assign tasks. What do you want to build?"
 ```
 
 That's it! Your agents are now coordinating via Redis.
