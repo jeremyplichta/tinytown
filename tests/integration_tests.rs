@@ -24,8 +24,6 @@ struct TownGuard {
     temp_dir: TempDir,
 }
 
-
-
 impl Drop for TownGuard {
     fn drop(&mut self) {
         cleanup_redis(&self.temp_dir);
@@ -1479,8 +1477,16 @@ async fn test_redis_url_unix_socket() -> Result<(), Box<dyn std::error::Error>> 
     // Default config should use Unix socket
     assert!(config.redis.use_socket);
     let url = config.redis_url();
-    assert!(url.starts_with("unix://"), "Expected unix:// URL, got: {}", url);
-    assert!(url.contains("redis.sock"), "Expected socket path in URL, got: {}", url);
+    assert!(
+        url.starts_with("unix://"),
+        "Expected unix:// URL, got: {}",
+        url
+    );
+    assert!(
+        url.contains("redis.sock"),
+        "Expected socket path in URL, got: {}",
+        url
+    );
 
     Ok(())
 }
@@ -1494,7 +1500,9 @@ async fn test_redis_url_tcp_no_password() -> Result<(), Box<dyn std::error::Erro
 
     // Clean up env var first
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1524,7 +1532,9 @@ async fn test_redis_url_tcp_with_password() -> Result<(), Box<dyn std::error::Er
 
     // Clean up env var first
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1540,7 +1550,11 @@ async fn test_redis_url_tcp_with_password() -> Result<(), Box<dyn std::error::Er
     };
 
     let url = config.redis_url();
-    assert_eq!(url, "redis://:secret123@localhost:6379", "Unexpected URL: {}", url);
+    assert_eq!(
+        url, "redis://:secret123@localhost:6379",
+        "Unexpected URL: {}",
+        url
+    );
 
     Ok(())
 }
@@ -1554,7 +1568,9 @@ async fn test_redis_url_tls_enabled() -> Result<(), Box<dyn std::error::Error>> 
 
     // Clean up env var first
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1570,7 +1586,11 @@ async fn test_redis_url_tls_enabled() -> Result<(), Box<dyn std::error::Error>> 
     };
 
     let url = config.redis_url();
-    assert!(url.starts_with("rediss://"), "Expected rediss:// scheme, got: {}", url);
+    assert!(
+        url.starts_with("rediss://"),
+        "Expected rediss:// scheme, got: {}",
+        url
+    );
     assert_eq!(url, "rediss://:tls-password@redis.example.com:6379");
 
     Ok(())
@@ -1587,7 +1607,10 @@ async fn test_is_remote_redis() -> Result<(), Box<dyn std::error::Error>> {
 
     // Unix socket is not remote
     config.redis.use_socket = true;
-    assert!(!config.is_remote_redis(), "Unix socket should not be remote");
+    assert!(
+        !config.is_remote_redis(),
+        "Unix socket should not be remote"
+    );
 
     // localhost is not remote
     config.redis = RedisConfig {
@@ -1608,7 +1631,10 @@ async fn test_is_remote_redis() -> Result<(), Box<dyn std::error::Error>> {
 
     // External host IS remote
     config.redis.host = "redis.example.com".to_string();
-    assert!(config.is_remote_redis(), "redis.example.com should be remote");
+    assert!(
+        config.is_remote_redis(),
+        "redis.example.com should be remote"
+    );
 
     // IP address IS remote
     config.redis.host = "192.168.1.100".to_string();
@@ -1633,7 +1659,10 @@ async fn test_redis_config_defaults() -> Result<(), Box<dyn std::error::Error>> 
     assert_eq!(config.port, 6379);
 
     // Security defaults - disabled by default
-    assert!(config.password.is_none(), "Password should be None by default");
+    assert!(
+        config.password.is_none(),
+        "Password should be None by default"
+    );
     assert!(!config.tls_enabled, "TLS should be disabled by default");
     assert!(config.tls_cert.is_none());
     assert!(config.tls_key.is_none());
@@ -1654,7 +1683,9 @@ async fn test_redis_password_env_var_override() -> Result<(), Box<dyn std::error
 
     // Clean up any existing env var first
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1671,7 +1702,9 @@ async fn test_redis_password_env_var_override() -> Result<(), Box<dyn std::error
 
     // Set env var to override
     // Safety: This is a serial test
-    unsafe { std::env::set_var("TINYTOWN_REDIS_PASSWORD", "env-password"); }
+    unsafe {
+        std::env::set_var("TINYTOWN_REDIS_PASSWORD", "env-password");
+    }
 
     // redis_password() should return env var
     assert_eq!(
@@ -1695,7 +1728,9 @@ async fn test_redis_password_env_var_override() -> Result<(), Box<dyn std::error
 
     // Clean up env var
     // Safety: This is a single-threaded test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     // Now it should use config password
     assert_eq!(
@@ -1716,7 +1751,9 @@ async fn test_redis_url_redacted_masks_password() -> Result<(), Box<dyn std::err
 
     // Clean up any env var first to ensure test isolation
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1770,7 +1807,9 @@ async fn test_redis_url_redacted_no_password() -> Result<(), Box<dyn std::error:
 
     // Clean up any env var first to ensure test isolation
     // Safety: This is a serial test
-    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+    unsafe {
+        std::env::remove_var("TINYTOWN_REDIS_PASSWORD");
+    }
 
     let temp_dir = TempDir::new()?;
     let mut config = Config::new("test-town", temp_dir.path());
@@ -1788,10 +1827,7 @@ async fn test_redis_url_redacted_no_password() -> Result<(), Box<dyn std::error:
     // Both should be the same when no password
     let real_url = config.redis_url();
     let redacted_url = config.redis_url_redacted();
-    assert_eq!(
-        real_url, redacted_url,
-        "URLs should match when no password"
-    );
+    assert_eq!(real_url, redacted_url, "URLs should match when no password");
     assert_eq!(real_url, "redis://localhost:6379");
 
     Ok(())

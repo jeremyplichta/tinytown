@@ -8,8 +8,8 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use redis::aio::ConnectionManager;
 use redis::Client;
+use redis::aio::ConnectionManager;
 use tracing::{debug, info, warn};
 
 use crate::error::{Error, Result};
@@ -46,9 +46,15 @@ impl RedisManager {
         })
     }
 
-    pub fn socket_path(&self) -> &Path { &self.socket_path }
-    pub fn pid_file(&self) -> &Path { &self.pid_file }
-    pub fn redis_url(&self) -> String { format!("unix://{}", self.socket_path.display()) }
+    pub fn socket_path(&self) -> &Path {
+        &self.socket_path
+    }
+    pub fn pid_file(&self) -> &Path {
+        &self.pid_file
+    }
+    pub fn redis_url(&self) -> String {
+        format!("unix://{}", self.socket_path.display())
+    }
 
     /// Ensure Redis is running. Starts it if not already running.
     pub async fn ensure_running(&self) -> Result<()> {
@@ -70,13 +76,20 @@ impl RedisManager {
 
         let status = Command::new(&redis_bin)
             .args([
-                "--unixsocket", self.socket_path.to_str().unwrap(),
-                "--unixsocketperm", "700",
-                "--port", "0",
-                "--daemonize", "yes",
-                "--pidfile", self.pid_file.to_str().unwrap(),
-                "--loglevel", "warning",
-                "--dir", self.data_dir.to_str().unwrap(),
+                "--unixsocket",
+                self.socket_path.to_str().unwrap(),
+                "--unixsocketperm",
+                "700",
+                "--port",
+                "0",
+                "--daemonize",
+                "yes",
+                "--pidfile",
+                self.pid_file.to_str().unwrap(),
+                "--loglevel",
+                "warning",
+                "--dir",
+                self.data_dir.to_str().unwrap(),
             ])
             .status()?;
 
@@ -91,7 +104,9 @@ impl RedisManager {
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        Err(Error::Timeout("Redis socket not ready after 5 seconds".into()))
+        Err(Error::Timeout(
+            "Redis socket not ready after 5 seconds".into(),
+        ))
     }
 
     pub async fn connect(&self) -> Result<ConnectionManager> {
@@ -99,17 +114,21 @@ impl RedisManager {
         let conn = tokio::time::timeout(
             std::time::Duration::from_secs(1),
             ConnectionManager::new(client),
-        ).await.map_err(|_| Error::Timeout("Redis connection timed out".into()))??;
+        )
+        .await
+        .map_err(|_| Error::Timeout("Redis connection timed out".into()))??;
         Ok(conn)
     }
 
     pub async fn stop(&self) -> Result<()> {
-        if let Ok(pid_str) = std::fs::read_to_string(&self.pid_file) {
-            if let Ok(pid) = pid_str.trim().parse::<i32>() {
-                info!("Stopping Redis (PID {})", pid);
-                unsafe { libc::kill(pid, libc::SIGTERM); }
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        if let Ok(pid_str) = std::fs::read_to_string(&self.pid_file)
+            && let Ok(pid) = pid_str.trim().parse::<i32>()
+        {
+            info!("Stopping Redis (PID {})", pid);
+            unsafe {
+                libc::kill(pid, libc::SIGTERM);
             }
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         }
         std::fs::remove_file(&self.socket_path).ok();
         std::fs::remove_file(&self.pid_file).ok();
@@ -129,28 +148,33 @@ impl RedisManager {
 
     fn check_redis_version() -> Result<()> {
         let redis_bin = Self::find_redis_server();
-        let output = Command::new(&redis_bin).arg("--version").output()
+        let output = Command::new(&redis_bin)
+            .arg("--version")
+            .output()
             .map_err(|_| Error::Config("redis-server not found".into()))?;
         let version_str = String::from_utf8_lossy(&output.stdout);
-        
+
         if let Some(v_start) = version_str.find("v=") {
             let v_part = &version_str[v_start + 2..];
             let parts: Vec<&str> = v_part.split('.').collect();
             if parts.len() >= 2 {
                 let major: u32 = parts[0].parse().unwrap_or(0);
-                let minor: u32 = parts[1].split(|c: char| !c.is_ascii_digit()).next()
-                    .and_then(|s| s.parse().ok()).unwrap_or(0);
+                let minor: u32 = parts[1]
+                    .split(|c: char| !c.is_ascii_digit())
+                    .next()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(0);
                 if (major, minor) >= MIN_REDIS_VERSION {
                     info!("Redis version {}.{} detected ✓", major, minor);
                     return Ok(());
                 }
                 return Err(Error::Config(format!(
-                    "Redis {}.{} required, found {}.{}", 
-                    MIN_REDIS_VERSION.0, MIN_REDIS_VERSION.1, major, minor)));
+                    "Redis {}.{} required, found {}.{}",
+                    MIN_REDIS_VERSION.0, MIN_REDIS_VERSION.1, major, minor
+                )));
             }
         }
         warn!("Could not parse Redis version, proceeding anyway");
         Ok(())
     }
 }
-

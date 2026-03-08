@@ -82,7 +82,6 @@ pub struct RedisConfig {
     pub aof_path: String,
 
     // Security fields for TCP mode
-
     /// Redis password (AUTH command)
     #[serde(default)]
     pub password: Option<String>,
@@ -274,7 +273,10 @@ impl Config {
             // Include password in URL if configured
             match password {
                 Some(pass) => {
-                    format!("{}://:{}@{}:{}", scheme, pass, self.redis.host, self.redis.port)
+                    format!(
+                        "{}://:{}@{}:{}",
+                        scheme, pass, self.redis.host, self.redis.port
+                    )
                 }
                 None => format!("{}://{}:{}", scheme, self.redis.host, self.redis.port),
             }
@@ -303,8 +305,8 @@ impl Config {
             };
 
             // Check if any password is set (env var or config)
-            let has_password = std::env::var("TINYTOWN_REDIS_PASSWORD").is_ok()
-                || self.redis.password.is_some();
+            let has_password =
+                std::env::var("TINYTOWN_REDIS_PASSWORD").is_ok() || self.redis.password.is_some();
 
             if has_password {
                 format!("{}://:****@{}:{}", scheme, self.redis.host, self.redis.port)

@@ -164,11 +164,8 @@ impl Town {
             config.socket_path().exists()
         } else {
             // Local TCP mode - try to connect to the port
-            std::net::TcpStream::connect(format!(
-                "{}:{}",
-                config.redis.bind, config.redis.port
-            ))
-            .is_ok()
+            std::net::TcpStream::connect(format!("{}:{}", config.redis.bind, config.redis.port))
+                .is_ok()
         };
 
         // Try to connect to Redis, start if needed
@@ -275,10 +272,7 @@ impl Town {
                 }
             } else {
                 // Plain TCP
-                args.extend([
-                    "--port".to_string(),
-                    config.redis.port.to_string(),
-                ]);
+                args.extend(["--port".to_string(), config.redis.port.to_string()]);
             }
 
             // Bind address
