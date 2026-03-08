@@ -442,13 +442,14 @@ async fn main() -> Result<()> {
 
 You are agent "{name}" in Tinytown "{town_name}".
 {urgent_section}
-## Your Task
-Check your inbox and complete any assigned tasks. Use the `tt` CLI:
+## Available Commands
 
 ```bash
-tt status                    # Check town status
-tt list                      # List all agents
-tt assign <agent> "task"     # Send task to another agent (for handoffs)
+tt status                    # Check town status and all agents
+tt inbox {name}              # Check YOUR inbox for messages
+tt assign <agent> "task"     # Send task to another agent
+tt send <agent> "message"    # Send message to another agent
+tt send <agent> --urgent "!" # Send urgent message
 ```
 
 ## Current State
@@ -456,14 +457,31 @@ tt assign <agent> "task"     # Send task to another agent (for handoffs)
 - Messages waiting: {inbox_len}
 - Urgent messages: {urgent_count}
 
-## Instructions
-1. Handle any URGENT messages first
-2. Complete your assigned task
-3. When done, your output will be logged
-4. If you need to hand off work, use `tt assign`
-5. If blocked, describe what you need
+## Your Workflow
 
-Begin work.
+1. **Handle URGENT messages first** (if any above)
+2. **Check your inbox**: `tt inbox {name}`
+3. **Do the work** requested in messages
+4. **Check for more work**: `tt inbox {name}` again
+5. **If more messages**, continue working on them
+6. **If inbox empty**, you can finish this round
+7. **If blocked**, send message to conductor or another agent
+
+**Don't just exit** - keep checking `tt inbox {name}` and working until your inbox is empty!
+
+## Hand-offs
+
+If you need another agent to do something:
+```bash
+tt assign reviewer "Please review src/auth.rs for security issues"
+```
+
+If you're done and want to notify someone:
+```bash
+tt send conductor "Auth API complete. Ready for review."
+```
+
+Begin work. Check your inbox and keep working until it's empty.
 "#,
                     name = name,
                     town_name = config.name,
