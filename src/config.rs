@@ -178,8 +178,12 @@ impl Config {
         }
 
         let content = std::fs::read_to_string(&config_path)?;
-        let mut config: Config = toml::from_str(&content)
-            .map_err(|e| Error::Io(std::io::Error::other(format!("Invalid tinytown.toml: {}", e))))?;
+        let mut config: Config = toml::from_str(&content).map_err(|e| {
+            Error::Io(std::io::Error::other(format!(
+                "Invalid tinytown.toml: {}",
+                e
+            )))
+        })?;
         config.root = root.to_path_buf();
 
         Ok(config)
@@ -188,8 +192,12 @@ impl Config {
     /// Save configuration to the town directory.
     pub fn save(&self) -> Result<()> {
         let config_path = self.root.join(CONFIG_FILE);
-        let content = toml::to_string_pretty(self)
-            .map_err(|e| Error::Io(std::io::Error::other(format!("Failed to serialize config: {}", e))))?;
+        let content = toml::to_string_pretty(self).map_err(|e| {
+            Error::Io(std::io::Error::other(format!(
+                "Failed to serialize config: {}",
+                e
+            )))
+        })?;
         std::fs::write(&config_path, content)?;
         Ok(())
     }
