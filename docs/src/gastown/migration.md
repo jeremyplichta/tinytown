@@ -58,7 +58,7 @@ Deliberately omitted for simplicity:
 ### Step 1: Install Tinytown
 
 ```bash
-git clone https://github.com/jeremyplichta/tinytown.git
+git clone https://github.com/redis-field-engineering/tinytown.git
 cd tinytown
 cargo install --path .
 ```

@@ -6,7 +6,7 @@ authors = ["Jeremy Plichta <jeremy.plichta@redis.com>"]
 description = "A simple, fast multi-agent orchestration system using Redis for message passing"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/jeremyplichta/tinytown"
+repository = "https://github.com/redis-field-engineering/tinytown"
 keywords = ["agents", "orchestration", "redis", "multi-agent"]
 categories = ["command-line-utilities", "concurrency"]
 

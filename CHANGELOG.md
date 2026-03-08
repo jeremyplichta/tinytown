@@ -5,53 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.0](https://github.com/jeremyplichta/tinytown/compare/v0.3.0...v0.4.0) (2026-03-08)
+## [0.4.0](https://github.com/redis-field-engineering/tinytown/compare/v0.3.0...v0.4.0) (2026-03-08)
 
 
 ### Features
 
-* add RedisManager for centralized Redis instance ([bbca6a1](https://github.com/jeremyplichta/tinytown/commit/bbca6a151c78d202163e94019fd1c099faa13829))
-* **cli:** add 'tt recover' command for orphaned agents ([cc18c70](https://github.com/jeremyplichta/tinytown/commit/cc18c70f445a08d074e50290d969d937533b78bd))
-* **cli:** add global town registry in ~/.tt/towns.toml ([c5ab161](https://github.com/jeremyplichta/tinytown/commit/c5ab1615d78b4ac36d10695aaeaa4840798d2606))
-* **cli:** add task backlog queue commands ([87030b6](https://github.com/jeremyplichta/tinytown/commit/87030b667fc28a0d3dfd09c8e76daa8bd72b77c2))
-* **redis:** add TCP support with password authentication ([7538924](https://github.com/jeremyplichta/tinytown/commit/75389242512a9f6df8d43e268b0f266c27d4f877))
+* add RedisManager for centralized Redis instance ([bbca6a1](https://github.com/redis-field-engineering/tinytown/commit/bbca6a151c78d202163e94019fd1c099faa13829))
+* **cli:** add 'tt recover' command for orphaned agents ([cc18c70](https://github.com/redis-field-engineering/tinytown/commit/cc18c70f445a08d074e50290d969d937533b78bd))
+* **cli:** add global town registry in ~/.tt/towns.toml ([c5ab161](https://github.com/redis-field-engineering/tinytown/commit/c5ab1615d78b4ac36d10695aaeaa4840798d2606))
+* **cli:** add task backlog queue commands ([87030b6](https://github.com/redis-field-engineering/tinytown/commit/87030b667fc28a0d3dfd09c8e76daa8bd72b77c2))
+* **redis:** add TCP support with password authentication ([7538924](https://github.com/redis-field-engineering/tinytown/commit/75389242512a9f6df8d43e268b0f266c27d4f877))
 
 
 ### Bug Fixes
 
-* **tests:** add Redis cleanup to prevent process leaks ([d51d096](https://github.com/jeremyplichta/tinytown/commit/d51d0967e243d5bc42d72c5b1b55d0240aec1ed6))
+* **tests:** add Redis cleanup to prevent process leaks ([d51d096](https://github.com/redis-field-engineering/tinytown/commit/d51d0967e243d5bc42d72c5b1b55d0240aec1ed6))
 
-## [0.3.0](https://github.com/jeremyplichta/tinytown/compare/v0.2.0...v0.3.0) (2026-03-08)
-
-
-### Features
-
-* add global config and rename model to cli ([c679481](https://github.com/jeremyplichta/tinytown/commit/c67948174903159518c33d23c1acf294f46831d8))
-* auto-detect Redis in ~/.tt/bin ([9b11fdf](https://github.com/jeremyplichta/tinytown/commit/9b11fdf559a2aa376b19f00ef94792e37c5b6109))
-
-## [0.2.0](https://github.com/jeremyplichta/tinytown/compare/v0.1.0...v0.2.0) (2026-03-08)
+## [0.3.0](https://github.com/redis-field-engineering/tinytown/compare/v0.2.0...v0.3.0) (2026-03-08)
 
 
 ### Features
 
-* Add agent stats (rounds completed, uptime) ([4b471ba](https://github.com/jeremyplichta/tinytown/commit/4b471baeba2d574b625c98a1c2589a9835a46122))
-* Add conductor mode, task planning DSL, and default model ([ce5bce0](https://github.com/jeremyplichta/tinytown/commit/ce5bce0deb4f8dbb90202b1aa884899ed82cc771))
-* Add deep status with bounded, TTL'd activity logs ([3d4a5e4](https://github.com/jeremyplichta/tinytown/commit/3d4a5e4faeb10c62746317466e676bec0b8687af))
-* Add Redis AOF save/restore for version control ([464f868](https://github.com/jeremyplichta/tinytown/commit/464f868f55d210eb581a98d6db9f5e2b3ae2fb45))
-* Add tt bootstrap to download and build Redis via AI agent ([580dc0c](https://github.com/jeremyplichta/tinytown/commit/580dc0c031e43f8d50b2d5a01daee95c16b2d1bc))
-* Add tt kill for graceful agent cleanup ([1545a6d](https://github.com/jeremyplichta/tinytown/commit/1545a6d285672add0f25d512cf6d7c5b506f2957))
-* Add urgent message queue for priority interrupts ([497250d](https://github.com/jeremyplichta/tinytown/commit/497250de6b01e3901706617d4099d709171cc1ac))
-* Agent prompt instructs to keep checking inbox until empty ([0de8a7c](https://github.com/jeremyplichta/tinytown/commit/0de8a7c8700360b37728fc3605ba5212a83ce30f))
-* Agents are real processes with supervisor loop ([351a22f](https://github.com/jeremyplichta/tinytown/commit/351a22fa802918dbfe1be4a832f4f9d55c1053d7))
-* Auto-derive town name from git repo and branch ([71be085](https://github.com/jeremyplichta/tinytown/commit/71be085e062125205a52b81959c619dfab115690))
-* Conductor is context-aware and suggests team roles ([1eff77c](https://github.com/jeremyplichta/tinytown/commit/1eff77c2abf6b7807258864992bbe77d1a6248ab))
-* Conductor saves state to tasks.toml for git ([6c9a513](https://github.com/jeremyplichta/tinytown/commit/6c9a513ea9bec6cfff2e1431e1e2984ced4f796e))
+* add global config and rename model to cli ([c679481](https://github.com/redis-field-engineering/tinytown/commit/c67948174903159518c33d23c1acf294f46831d8))
+* auto-detect Redis in ~/.tt/bin ([9b11fdf](https://github.com/redis-field-engineering/tinytown/commit/9b11fdf559a2aa376b19f00ef94792e37c5b6109))
+
+## [0.2.0](https://github.com/redis-field-engineering/tinytown/compare/v0.1.0...v0.2.0) (2026-03-08)
+
+
+### Features
+
+* Add agent stats (rounds completed, uptime) ([4b471ba](https://github.com/redis-field-engineering/tinytown/commit/4b471baeba2d574b625c98a1c2589a9835a46122))
+* Add conductor mode, task planning DSL, and default model ([ce5bce0](https://github.com/redis-field-engineering/tinytown/commit/ce5bce0deb4f8dbb90202b1aa884899ed82cc771))
+* Add deep status with bounded, TTL'd activity logs ([3d4a5e4](https://github.com/redis-field-engineering/tinytown/commit/3d4a5e4faeb10c62746317466e676bec0b8687af))
+* Add Redis AOF save/restore for version control ([464f868](https://github.com/redis-field-engineering/tinytown/commit/464f868f55d210eb581a98d6db9f5e2b3ae2fb45))
+* Add tt bootstrap to download and build Redis via AI agent ([580dc0c](https://github.com/redis-field-engineering/tinytown/commit/580dc0c031e43f8d50b2d5a01daee95c16b2d1bc))
+* Add tt kill for graceful agent cleanup ([1545a6d](https://github.com/redis-field-engineering/tinytown/commit/1545a6d285672add0f25d512cf6d7c5b506f2957))
+* Add urgent message queue for priority interrupts ([497250d](https://github.com/redis-field-engineering/tinytown/commit/497250de6b01e3901706617d4099d709171cc1ac))
+* Agent prompt instructs to keep checking inbox until empty ([0de8a7c](https://github.com/redis-field-engineering/tinytown/commit/0de8a7c8700360b37728fc3605ba5212a83ce30f))
+* Agents are real processes with supervisor loop ([351a22f](https://github.com/redis-field-engineering/tinytown/commit/351a22fa802918dbfe1be4a832f4f9d55c1053d7))
+* Auto-derive town name from git repo and branch ([71be085](https://github.com/redis-field-engineering/tinytown/commit/71be085e062125205a52b81959c619dfab115690))
+* Conductor is context-aware and suggests team roles ([1eff77c](https://github.com/redis-field-engineering/tinytown/commit/1eff77c2abf6b7807258864992bbe77d1a6248ab))
+* Conductor saves state to tasks.toml for git ([6c9a513](https://github.com/redis-field-engineering/tinytown/commit/6c9a513ea9bec6cfff2e1431e1e2984ced4f796e))
 
 
 ### Bug Fixes
 
-* Update CLI commands with correct non-interactive flags ([bfb9608](https://github.com/jeremyplichta/tinytown/commit/bfb9608d5649aa4c1403242daeb1c30b0e12705f))
-* update default branch to main and add quick install instructions ([37a1bb6](https://github.com/jeremyplichta/tinytown/commit/37a1bb6b4cb65021190771167ff07822b57940bc))
+* Update CLI commands with correct non-interactive flags ([bfb9608](https://github.com/redis-field-engineering/tinytown/commit/bfb9608d5649aa4c1403242daeb1c30b0e12705f))
+* update default branch to main and add quick install instructions ([37a1bb6](https://github.com/redis-field-engineering/tinytown/commit/37a1bb6b4cb65021190771167ff07822b57940bc))
 
 ## 0.1.0 (2026-03-08)
 
@@ -62,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-* Initial release of Tinytown v0.1.0 ([c3a693a](https://github.com/jeremyplichta/tinytown/commit/c3a693aede5c5dd8a0fb344aa2742ae4082cd6fa))
+* Initial release of Tinytown v0.1.0 ([c3a693a](https://github.com/redis-field-engineering/tinytown/commit/c3a693aede5c5dd8a0fb344aa2742ae4082cd6fa))
 
 ## [Unreleased]
 

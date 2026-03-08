@@ -10,8 +10,8 @@ build-dir = "book"
 create-missing = true
 
 [output.html]
-git-repository-url = "https://github.com/jeremyplichta/tinytown"
-edit-url-template = "https://github.com/jeremyplichta/tinytown/edit/master/docs/{path}"
+git-repository-url = "https://github.com/redis-field-engineering/tinytown"
+edit-url-template = "https://github.com/redis-field-engineering/tinytown/edit/master/docs/{path}"
 default-theme = "rust"
 
 [output.html.fold]

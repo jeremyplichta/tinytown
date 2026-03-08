@@ -13,7 +13,7 @@ cargo install tinytown
 ### From Source
 
 ```bash
-git clone https://github.com/jeremyplichta/tinytown.git
+git clone https://github.com/redis-field-engineering/tinytown.git
 cd tinytown
 cargo install --path .
 ```
