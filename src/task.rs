@@ -156,4 +156,3 @@ impl Task {
         self.updated_at = Utc::now();
     }
 }
-

@@ -10,8 +10,8 @@ use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 
-use redis::aio::ConnectionManager;
 use redis::Client;
+use redis::aio::ConnectionManager;
 use tokio::process::{Child, Command};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -62,7 +62,10 @@ impl Town {
         let version = Self::parse_redis_version(&version_str)?;
 
         if version < MIN_REDIS_VERSION {
-            return Err(Error::RedisVersionTooOld(format!("{}.{}", version.0, version.1)));
+            return Err(Error::RedisVersionTooOld(format!(
+                "{}.{}",
+                version.0, version.1
+            )));
         }
 
         info!("Redis version {}.{} detected ✓", version.0, version.1);
@@ -83,9 +86,11 @@ impl Town {
             return Err(Error::RedisVersionTooOld(version_part.to_string()));
         }
 
-        let major = parts[0].parse::<u32>()
+        let major = parts[0]
+            .parse::<u32>()
             .map_err(|_| Error::RedisVersionTooOld(version_part.to_string()))?;
-        let minor = parts[1].parse::<u32>()
+        let minor = parts[1]
+            .parse::<u32>()
             .map_err(|_| Error::RedisVersionTooOld(version_part.to_string()))?;
 
         Ok((major, minor))
@@ -114,7 +119,7 @@ impl Town {
         // Start Redis and connect
         let redis_process = Self::start_redis(&config).await?;
         let channel = Self::connect_redis(&config).await?;
-        
+
         Ok(Self {
             config,
             channel,
@@ -141,7 +146,7 @@ impl Town {
                 (ch, Some(proc))
             }
         };
-        
+
         Ok(Self {
             config,
             channel,
@@ -154,26 +159,31 @@ impl Town {
     /// Start a local Redis server with Unix socket.
     async fn start_redis(config: &Config) -> Result<Child> {
         let socket_path = config.socket_path();
-        
+
         // Remove stale socket if exists
         if socket_path.exists() {
             std::fs::remove_file(&socket_path)?;
         }
-        
+
         info!("Starting Redis with socket: {}", socket_path.display());
-        
+
         let child = Command::new("redis-server")
             .args([
-                "--unixsocket", socket_path.to_str().unwrap(),
-                "--unixsocketperm", "700",
-                "--port", "0",  // Disable TCP
-                "--daemonize", "no",
-                "--loglevel", "warning",
+                "--unixsocket",
+                socket_path.to_str().unwrap(),
+                "--unixsocketperm",
+                "700",
+                "--port",
+                "0", // Disable TCP
+                "--daemonize",
+                "no",
+                "--loglevel",
+                "warning",
             ])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;
-        
+
         // Wait for socket to be ready
         for _ in 0..50 {
             if socket_path.exists() {
@@ -182,7 +192,7 @@ impl Town {
             }
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
-        
+
         Err(Error::Timeout("Redis failed to start".into()))
     }
 
@@ -190,10 +200,10 @@ impl Town {
     async fn connect_redis(config: &Config) -> Result<Channel> {
         let url = config.redis_url();
         debug!("Connecting to Redis: {}", url);
-        
+
         let client = Client::open(url)?;
         let conn = ConnectionManager::new(client).await?;
-        
+
         Ok(Channel::new(conn))
     }
 
@@ -201,13 +211,13 @@ impl Town {
     pub async fn spawn_agent(&self, name: &str, model: &str) -> Result<AgentHandle> {
         let agent = Agent::new(name, model, AgentType::Worker);
         let id = agent.id;
-        
+
         // Store agent state
         self.channel.set_agent_state(&agent).await?;
         self.agents.write().await.insert(id, agent);
-        
+
         info!("Spawned agent '{}' ({})", name, id);
-        
+
         Ok(AgentHandle {
             id,
             channel: self.channel.clone(),
@@ -282,7 +292,9 @@ impl AgentHandle {
         let msg = Message::new(
             AgentId::supervisor(),
             self.id,
-            MessageType::TaskAssign { task_id: task_id.to_string() },
+            MessageType::TaskAssign {
+                task_id: task_id.to_string(),
+            },
         );
         self.channel.send(&msg).await?;
 
@@ -325,4 +337,3 @@ impl AgentHandle {
         }
     }
 }
-

@@ -9,8 +9,8 @@
 
 use std::time::Duration;
 
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
+use redis::aio::ConnectionManager;
 use tracing::{debug, instrument};
 
 use crate::agent::AgentId;
@@ -47,7 +47,7 @@ impl Channel {
         let mut conn = self.conn.clone();
         let inbox_key = format!("{}{}", INBOX_PREFIX, message.to);
         let serialized = serde_json::to_string(message)?;
-        
+
         // Use priority queues: high priority goes to front
         match message.priority {
             Priority::Urgent | Priority::High => {
@@ -57,7 +57,7 @@ impl Channel {
                 let _: () = conn.rpush(&inbox_key, &serialized).await?;
             }
         }
-        
+
         debug!("Sent message {} to {}", message.id, message.to);
         Ok(())
     }
@@ -67,11 +67,9 @@ impl Channel {
     pub async fn receive(&self, agent_id: AgentId, timeout: Duration) -> Result<Option<Message>> {
         let mut conn = self.conn.clone();
         let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
-        
-        let result: Option<String> = conn
-            .blpop(&inbox_key, timeout.as_secs_f64())
-            .await?;
-        
+
+        let result: Option<String> = conn.blpop(&inbox_key, timeout.as_secs_f64()).await?;
+
         match result {
             Some(data) => {
                 let message: Message = serde_json::from_str(&data)?;
@@ -86,9 +84,9 @@ impl Channel {
     pub async fn try_receive(&self, agent_id: AgentId) -> Result<Option<Message>> {
         let mut conn = self.conn.clone();
         let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
-        
+
         let result: Option<String> = conn.lpop(&inbox_key, None).await?;
-        
+
         match result {
             Some(data) => {
                 let message: Message = serde_json::from_str(&data)?;
@@ -128,7 +126,7 @@ impl Channel {
         let mut conn = self.conn.clone();
         let key = format!("{}{}", STATE_PREFIX, agent_id);
         let result: Option<String> = conn.get(&key).await?;
-        
+
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),
             None => Ok(None),
@@ -145,15 +143,17 @@ impl Channel {
     }
 
     /// Get a task from Redis.
-    pub async fn get_task(&self, task_id: crate::task::TaskId) -> Result<Option<crate::task::Task>> {
+    pub async fn get_task(
+        &self,
+        task_id: crate::task::TaskId,
+    ) -> Result<Option<crate::task::Task>> {
         let mut conn = self.conn.clone();
         let key = format!("{}{}", TASK_PREFIX, task_id);
         let result: Option<String> = conn.get(&key).await?;
-        
+
         match result {
             Some(data) => Ok(Some(serde_json::from_str(&data)?)),
             None => Ok(None),
         }
     }
 }
-

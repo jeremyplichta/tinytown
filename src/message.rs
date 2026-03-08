@@ -63,7 +63,10 @@ pub enum MessageType {
     /// Status request
     StatusRequest,
     /// Status response
-    StatusResponse { state: String, current_task: Option<String> },
+    StatusResponse {
+        state: String,
+        current_task: Option<String>,
+    },
     /// Heartbeat ping
     Ping,
     /// Heartbeat pong
@@ -123,4 +126,3 @@ impl Message {
         self
     }
 }
-

@@ -51,11 +51,15 @@ pub enum Error {
     RedisNotRunning,
 
     /// Redis not installed
-    #[error("Redis not found. Please install Redis 8.0+ and ensure 'redis-server' is on your PATH.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/")]
+    #[error(
+        "Redis not found. Please install Redis 8.0+ and ensure 'redis-server' is on your PATH.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/"
+    )]
     RedisNotInstalled,
 
     /// Redis version too old
-    #[error("Redis version {0} is too old. Tinytown requires Redis 8.0 or later.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/")]
+    #[error(
+        "Redis version {0} is too old. Tinytown requires Redis 8.0 or later.\nSee: https://redis.io/docs/latest/operate/oss_and_stack/install/"
+    )]
     RedisVersionTooOld(String),
 
     /// Timeout waiting for operation
@@ -65,4 +69,3 @@ pub enum Error {
 
 /// Convenience Result type for tinytown.
 pub type Result<T> = std::result::Result<T, Error>;
-

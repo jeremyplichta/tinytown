@@ -106,36 +106,21 @@ impl Config {
     #[must_use]
     pub fn new(name: impl Into<String>, root: impl Into<PathBuf>) -> Self {
         let mut models = HashMap::new();
-        
+
         // Built-in model presets
         models.insert(
             "claude".to_string(),
             AgentModel::new("claude", "claude --print"),
         );
-        models.insert(
-            "gemini".to_string(),
-            AgentModel::new("gemini", "gemini"),
-        );
-        models.insert(
-            "auggie".to_string(),
-            AgentModel::new("auggie", "augment"),
-        );
-        models.insert(
-            "codex".to_string(),
-            AgentModel::new("codex", "codex"),
-        );
+        models.insert("gemini".to_string(), AgentModel::new("gemini", "gemini"));
+        models.insert("auggie".to_string(), AgentModel::new("auggie", "augment"));
+        models.insert("codex".to_string(), AgentModel::new("codex", "codex"));
         models.insert(
             "copilot".to_string(),
             AgentModel::new("copilot", "gh copilot"),
         );
-        models.insert(
-            "aider".to_string(),
-            AgentModel::new("aider", "aider"),
-        );
-        models.insert(
-            "cursor".to_string(),
-            AgentModel::new("cursor", "cursor"),
-        );
+        models.insert("aider".to_string(), AgentModel::new("aider", "aider"));
+        models.insert("cursor".to_string(), AgentModel::new("cursor", "cursor"));
 
         Self {
             name: name.into(),
@@ -151,7 +136,7 @@ impl Config {
     pub fn load(root: impl AsRef<Path>) -> Result<Self> {
         let root = root.as_ref();
         let config_path = root.join(CONFIG_FILE);
-        
+
         if !config_path.exists() {
             return Err(Error::NotInitialized(root.display().to_string()));
         }
@@ -159,7 +144,7 @@ impl Config {
         let content = std::fs::read_to_string(&config_path)?;
         let mut config: Config = serde_json::from_str(&content)?;
         config.root = root.to_path_buf();
-        
+
         Ok(config)
     }
 
@@ -178,9 +163,7 @@ impl Config {
         let base = if self.root.is_absolute() {
             self.root.clone()
         } else {
-            std::env::current_dir()
-                .unwrap_or_default()
-                .join(&self.root)
+            std::env::current_dir().unwrap_or_default().join(&self.root)
         };
         base.join(&self.redis.socket_path)
     }
@@ -195,4 +178,3 @@ impl Config {
         }
     }
 }
-

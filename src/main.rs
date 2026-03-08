@@ -80,9 +80,7 @@ async fn main() -> Result<()> {
     } else {
         EnvFilter::new("info")
     };
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .init();
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
     match cli.command {
         Commands::Init { name } => {
@@ -156,7 +154,9 @@ async fn main() -> Result<()> {
             let _town = Town::connect(&cli.town).await?;
             info!("🚀 Town started");
             // Keep running until Ctrl+C
-            tokio::signal::ctrl_c().await.expect("Failed to listen for ctrl-c");
+            tokio::signal::ctrl_c()
+                .await
+                .expect("Failed to listen for ctrl-c");
             info!("👋 Shutting down...");
         }
 
@@ -167,4 +167,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
