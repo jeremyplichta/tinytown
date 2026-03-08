@@ -1463,3 +1463,336 @@ async fn test_move_message_to_inbox() -> Result<(), Box<dyn std::error::Error>> 
 
     Ok(())
 }
+
+// ============================================================================
+// TCP REDIS CONFIGURATION TESTS
+// ============================================================================
+
+/// Test that redis_url() returns Unix socket URL when use_socket is true.
+#[tokio::test]
+async fn test_redis_url_unix_socket() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+
+    let temp_dir = TempDir::new()?;
+    let config = Config::new("test-town", temp_dir.path());
+
+    // Default config should use Unix socket
+    assert!(config.redis.use_socket);
+    let url = config.redis_url();
+    assert!(url.starts_with("unix://"), "Expected unix:// URL, got: {}", url);
+    assert!(url.contains("redis.sock"), "Expected socket path in URL, got: {}", url);
+
+    Ok(())
+}
+
+/// Test that redis_url() returns TCP URL without password.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_url_tcp_no_password() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up env var first
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TCP mode without password
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "127.0.0.1".to_string(),
+        port: 6380,
+        password: None,
+        tls_enabled: false,
+        ..Default::default()
+    };
+
+    let url = config.redis_url();
+    assert_eq!(url, "redis://127.0.0.1:6380", "Unexpected URL: {}", url);
+
+    Ok(())
+}
+
+/// Test that redis_url() returns TCP URL with password.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_url_tcp_with_password() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up env var first
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TCP mode with password
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "localhost".to_string(),
+        port: 6379,
+        password: Some("secret123".to_string()),
+        tls_enabled: false,
+        ..Default::default()
+    };
+
+    let url = config.redis_url();
+    assert_eq!(url, "redis://:secret123@localhost:6379", "Unexpected URL: {}", url);
+
+    Ok(())
+}
+
+/// Test that redis_url() returns TLS URL (rediss scheme) when TLS is enabled.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_url_tls_enabled() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up env var first
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TLS mode
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "redis.example.com".to_string(),
+        port: 6379,
+        password: Some("tls-password".to_string()),
+        tls_enabled: true,
+        ..Default::default()
+    };
+
+    let url = config.redis_url();
+    assert!(url.starts_with("rediss://"), "Expected rediss:// scheme, got: {}", url);
+    assert_eq!(url, "rediss://:tls-password@redis.example.com:6379");
+
+    Ok(())
+}
+
+/// Test is_remote_redis() correctly identifies local vs remote Redis.
+#[tokio::test]
+async fn test_is_remote_redis() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Unix socket is not remote
+    config.redis.use_socket = true;
+    assert!(!config.is_remote_redis(), "Unix socket should not be remote");
+
+    // localhost is not remote
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "localhost".to_string(),
+        port: 6379,
+        ..Default::default()
+    };
+    assert!(!config.is_remote_redis(), "localhost should not be remote");
+
+    // 127.0.0.1 is not remote
+    config.redis.host = "127.0.0.1".to_string();
+    assert!(!config.is_remote_redis(), "127.0.0.1 should not be remote");
+
+    // 127.0.1.1 is not remote (any 127.x.x.x)
+    config.redis.host = "127.0.1.1".to_string();
+    assert!(!config.is_remote_redis(), "127.x.x.x should not be remote");
+
+    // External host IS remote
+    config.redis.host = "redis.example.com".to_string();
+    assert!(config.is_remote_redis(), "redis.example.com should be remote");
+
+    // IP address IS remote
+    config.redis.host = "192.168.1.100".to_string();
+    assert!(config.is_remote_redis(), "192.168.1.100 should be remote");
+
+    Ok(())
+}
+
+/// Test that default RedisConfig has expected defaults.
+#[tokio::test]
+async fn test_redis_config_defaults() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::config::RedisConfig;
+
+    let config = RedisConfig::default();
+
+    // Unix socket is default
+    assert!(config.use_socket, "Default should use Unix socket");
+    assert_eq!(config.socket_path, "redis.sock");
+
+    // TCP defaults
+    assert_eq!(config.host, "127.0.0.1");
+    assert_eq!(config.port, 6379);
+
+    // Security defaults - disabled by default
+    assert!(config.password.is_none(), "Password should be None by default");
+    assert!(!config.tls_enabled, "TLS should be disabled by default");
+    assert!(config.tls_cert.is_none());
+    assert!(config.tls_key.is_none());
+    assert!(config.tls_ca_cert.is_none());
+
+    // Bind defaults to localhost for security
+    assert_eq!(config.bind, "127.0.0.1");
+
+    Ok(())
+}
+
+/// Test redis_url() uses env var password over config password.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_password_env_var_override() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up any existing env var first
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TCP mode with config password
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "localhost".to_string(),
+        port: 6379,
+        password: Some("config-password".to_string()),
+        tls_enabled: false,
+        ..Default::default()
+    };
+
+    // Set env var to override
+    // Safety: This is a serial test
+    unsafe { std::env::set_var("TINYTOWN_REDIS_PASSWORD", "env-password"); }
+
+    // redis_password() should return env var
+    assert_eq!(
+        config.redis_password(),
+        Some("env-password".to_string()),
+        "Env var should override config password"
+    );
+
+    // URL should use env var password
+    let url = config.redis_url();
+    assert!(
+        url.contains("env-password"),
+        "URL should use env var password, got: {}",
+        url
+    );
+    assert!(
+        !url.contains("config-password"),
+        "URL should NOT use config password, got: {}",
+        url
+    );
+
+    // Clean up env var
+    // Safety: This is a single-threaded test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    // Now it should use config password
+    assert_eq!(
+        config.redis_password(),
+        Some("config-password".to_string()),
+        "After removing env var, should use config password"
+    );
+
+    Ok(())
+}
+
+/// Test that redis_url_redacted() properly masks passwords.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_url_redacted_masks_password() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up any env var first to ensure test isolation
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TCP mode with password
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "redis.example.com".to_string(),
+        port: 6379,
+        password: Some("super-secret-password".to_string()),
+        tls_enabled: false,
+        ..Default::default()
+    };
+
+    // redis_url() contains real password
+    let real_url = config.redis_url();
+    assert!(
+        real_url.contains("super-secret-password"),
+        "Real URL should contain password"
+    );
+
+    // redis_url_redacted() should mask it
+    let redacted_url = config.redis_url_redacted();
+    assert!(
+        !redacted_url.contains("super-secret-password"),
+        "Redacted URL should NOT contain password"
+    );
+    assert!(
+        redacted_url.contains("****"),
+        "Redacted URL should contain mask: {}",
+        redacted_url
+    );
+    assert_eq!(redacted_url, "redis://:****@redis.example.com:6379");
+
+    // TLS mode should also be redacted properly
+    config.redis.tls_enabled = true;
+    let redacted_tls = config.redis_url_redacted();
+    assert!(redacted_tls.starts_with("rediss://"));
+    assert!(redacted_tls.contains("****"));
+    assert!(!redacted_tls.contains("super-secret-password"));
+
+    Ok(())
+}
+
+/// Test that redis_url_redacted() returns normal URL when no password is set.
+#[tokio::test]
+#[serial_test::serial]
+async fn test_redis_url_redacted_no_password() -> Result<(), Box<dyn std::error::Error>> {
+    use tinytown::Config;
+    use tinytown::config::RedisConfig;
+
+    // Clean up any env var first to ensure test isolation
+    // Safety: This is a serial test
+    unsafe { std::env::remove_var("TINYTOWN_REDIS_PASSWORD"); }
+
+    let temp_dir = TempDir::new()?;
+    let mut config = Config::new("test-town", temp_dir.path());
+
+    // Configure TCP mode without password
+    config.redis = RedisConfig {
+        use_socket: false,
+        host: "localhost".to_string(),
+        port: 6379,
+        password: None,
+        tls_enabled: false,
+        ..Default::default()
+    };
+
+    // Both should be the same when no password
+    let real_url = config.redis_url();
+    let redacted_url = config.redis_url_redacted();
+    assert_eq!(
+        real_url, redacted_url,
+        "URLs should match when no password"
+    );
+    assert_eq!(real_url, "redis://localhost:6379");
+
+    Ok(())
+}
