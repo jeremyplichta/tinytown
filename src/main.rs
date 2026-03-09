@@ -1139,6 +1139,16 @@ async fn main() -> Result<()> {
             let exe = std::env::current_exe()?;
             let town_path = cli.town.canonicalize().unwrap_or(cli.town.clone());
 
+            // Clean up old round log files to prevent stale data in 'tt status --deep'
+            // This handles the case where an agent is respawned with the same name
+            let log_dir = town_path.join(".tt/logs");
+            if log_dir.exists() {
+                let cleaned = clean_agent_round_logs(&log_dir, &name);
+                if cleaned > 0 {
+                    info!("   Cleaned {} old round log file(s)", cleaned);
+                }
+            }
+
             if foreground {
                 // Run agent loop in foreground
                 info!("🔄 Running agent loop (max {} rounds)...", max_rounds);
@@ -1169,7 +1179,6 @@ async fn main() -> Result<()> {
                 );
                 info!("   Logs: {}/.tt/logs/{}.log", town_path.display(), name);
 
-                let log_dir = town_path.join(".tt/logs");
                 std::fs::create_dir_all(&log_dir)?;
                 let log_file = std::fs::File::create(log_dir.join(format!("{}.log", name)))?;
 
