@@ -460,10 +460,10 @@ impl Channel {
         let mut agents = Vec::new();
         for key in keys {
             let fields: std::collections::HashMap<String, String> = conn.hgetall(&key).await?;
-            if !fields.is_empty() {
-                if let Ok(agent) = Self::parse_agent_from_hash(fields) {
-                    agents.push(agent);
-                }
+            if !fields.is_empty()
+                && let Ok(agent) = Self::parse_agent_from_hash(fields)
+            {
+                agents.push(agent);
             }
         }
         Ok(agents)
@@ -730,10 +730,10 @@ impl Channel {
 
         for key in keys {
             let fields: std::collections::HashMap<String, String> = conn.hgetall(&key).await?;
-            if !fields.is_empty() {
-                if let Ok(task) = Self::parse_task_from_hash(fields) {
-                    tasks.push(task);
-                }
+            if !fields.is_empty()
+                && let Ok(task) = Self::parse_task_from_hash(fields)
+            {
+                tasks.push(task);
             }
         }
 

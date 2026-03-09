@@ -283,6 +283,339 @@ pub async fn migrate_to_town_isolation(
     Ok(stats)
 }
 
+// =============================================================================
+// JSON String to Redis Hash Migration
+// =============================================================================
+
+/// Statistics from a JSON-to-Hash migration operation.
+#[derive(Debug, Default, Clone)]
+pub struct HashMigrationStats {
+    /// Number of agent keys migrated from JSON to Hash
+    pub agents_migrated: usize,
+    /// Number of task keys migrated from JSON to Hash
+    pub tasks_migrated: usize,
+    /// Keys that were already Hash type (skipped)
+    pub already_hash: usize,
+    /// Keys that failed to migrate
+    pub errors: Vec<String>,
+}
+
+impl HashMigrationStats {
+    /// Total number of keys migrated successfully.
+    pub fn total_migrated(&self) -> usize {
+        self.agents_migrated + self.tasks_migrated
+    }
+
+    /// Check if any migration occurred.
+    pub fn has_changes(&self) -> bool {
+        self.total_migrated() > 0
+    }
+}
+
+/// Check if there are JSON string keys that need migration to Hash.
+///
+/// Scans for agent and task keys that are stored as strings instead of hashes.
+pub async fn needs_hash_migration(
+    conn: &mut ConnectionManager,
+    town_name: &str,
+) -> Result<bool> {
+    // Check agent keys
+    let agent_pattern = format!("tt:{}:agent:*", town_name);
+    let agent_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&agent_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in agent_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "string" {
+            debug!("Found JSON string agent key: {}", key);
+            return Ok(true);
+        }
+    }
+
+    // Check task keys
+    let task_pattern = format!("tt:{}:task:*", town_name);
+    let task_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&task_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in task_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "string" {
+            debug!("Found JSON string task key: {}", key);
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
+/// Migrate a single agent key from JSON string to Hash.
+async fn migrate_agent_to_hash(conn: &mut ConnectionManager, key: &str) -> Result<()> {
+    // Get the JSON string
+    let json_str: String = conn.get(key).await?;
+
+    // Parse the JSON into agent fields
+    let agent: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| Error::Migration(format!("Failed to parse agent JSON: {}", e)))?;
+
+    // Build hash fields from JSON
+    let mut fields: Vec<(String, String)> = Vec::new();
+
+    if let Some(id) = agent.get("id").and_then(|v| v.as_str()) {
+        fields.push(("id".to_string(), id.to_string()));
+    }
+    if let Some(name) = agent.get("name").and_then(|v| v.as_str()) {
+        fields.push(("name".to_string(), name.to_string()));
+    }
+    if let Some(agent_type) = agent.get("agent_type").and_then(|v| v.as_str()) {
+        fields.push(("agent_type".to_string(), agent_type.to_string()));
+    }
+    if let Some(state) = agent.get("state").and_then(|v| v.as_str()) {
+        fields.push(("state".to_string(), state.to_string()));
+    }
+    if let Some(cli) = agent.get("cli").and_then(|v| v.as_str()) {
+        fields.push(("cli".to_string(), cli.to_string()));
+    }
+    if let Some(current_task) = agent.get("current_task").and_then(|v| v.as_str()) {
+        fields.push(("current_task".to_string(), current_task.to_string()));
+    }
+    if let Some(created_at) = agent.get("created_at").and_then(|v| v.as_str()) {
+        fields.push(("created_at".to_string(), created_at.to_string()));
+    }
+    if let Some(last_heartbeat) = agent.get("last_heartbeat").and_then(|v| v.as_str()) {
+        fields.push(("last_heartbeat".to_string(), last_heartbeat.to_string()));
+    }
+    if let Some(tasks_completed) = agent.get("tasks_completed") {
+        let val = if tasks_completed.is_u64() {
+            tasks_completed.as_u64().unwrap().to_string()
+        } else {
+            tasks_completed.to_string()
+        };
+        fields.push(("tasks_completed".to_string(), val));
+    }
+    if let Some(rounds_completed) = agent.get("rounds_completed") {
+        let val = if rounds_completed.is_u64() {
+            rounds_completed.as_u64().unwrap().to_string()
+        } else {
+            rounds_completed.to_string()
+        };
+        fields.push(("rounds_completed".to_string(), val));
+    }
+
+    if fields.is_empty() {
+        return Err(Error::Migration(format!(
+            "No valid fields found in agent JSON for key: {}",
+            key
+        )));
+    }
+
+    // Delete old string key and set hash atomically via pipeline
+    let mut pipe = redis::pipe();
+    pipe.del(key);
+    pipe.hset_multiple(key, &fields);
+    let _: () = pipe.query_async(conn).await?;
+
+    debug!("Migrated agent {} from JSON to Hash", key);
+    Ok(())
+}
+
+/// Migrate a single task key from JSON string to Hash.
+async fn migrate_task_to_hash(conn: &mut ConnectionManager, key: &str) -> Result<()> {
+    // Get the JSON string
+    let json_str: String = conn.get(key).await?;
+
+    // Parse the JSON into task fields
+    let task: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| Error::Migration(format!("Failed to parse task JSON: {}", e)))?;
+
+    // Build hash fields from JSON
+    let mut fields: Vec<(String, String)> = Vec::new();
+
+    if let Some(id) = task.get("id").and_then(|v| v.as_str()) {
+        fields.push(("id".to_string(), id.to_string()));
+    }
+    if let Some(description) = task.get("description").and_then(|v| v.as_str()) {
+        fields.push(("description".to_string(), description.to_string()));
+    }
+    if let Some(state) = task.get("state").and_then(|v| v.as_str()) {
+        fields.push(("state".to_string(), state.to_string()));
+    }
+    if let Some(assigned_to) = task.get("assigned_to").and_then(|v| v.as_str()) {
+        fields.push(("assigned_to".to_string(), assigned_to.to_string()));
+    }
+    if let Some(created_at) = task.get("created_at").and_then(|v| v.as_str()) {
+        fields.push(("created_at".to_string(), created_at.to_string()));
+    }
+    if let Some(updated_at) = task.get("updated_at").and_then(|v| v.as_str()) {
+        fields.push(("updated_at".to_string(), updated_at.to_string()));
+    }
+    if let Some(started_at) = task.get("started_at").and_then(|v| v.as_str()) {
+        fields.push(("started_at".to_string(), started_at.to_string()));
+    }
+    if let Some(completed_at) = task.get("completed_at").and_then(|v| v.as_str()) {
+        fields.push(("completed_at".to_string(), completed_at.to_string()));
+    }
+    if let Some(result) = task.get("result").and_then(|v| v.as_str()) {
+        fields.push(("result".to_string(), result.to_string()));
+    }
+    if let Some(parent_id) = task.get("parent_id").and_then(|v| v.as_str()) {
+        fields.push(("parent_id".to_string(), parent_id.to_string()));
+    }
+    // Tags remain as JSON array string
+    if let Some(tags) = task.get("tags") {
+        if tags.is_array() {
+            fields.push(("tags".to_string(), serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string())));
+        }
+    }
+
+    if fields.is_empty() {
+        return Err(Error::Migration(format!(
+            "No valid fields found in task JSON for key: {}",
+            key
+        )));
+    }
+
+    // Delete old string key and set hash atomically via pipeline
+    let mut pipe = redis::pipe();
+    pipe.del(key);
+    pipe.hset_multiple(key, &fields);
+    let _: () = pipe.query_async(conn).await?;
+
+    debug!("Migrated task {} from JSON to Hash", key);
+    Ok(())
+}
+
+/// Migrate all JSON string keys to Redis Hashes for a town.
+///
+/// This function:
+/// 1. Scans for agent and task keys with string type
+/// 2. Parses the JSON and converts to Hash fields
+/// 3. Atomically replaces the string key with a hash key
+///
+/// This is idempotent - running it multiple times is safe (already-migrated keys are skipped).
+pub async fn migrate_json_to_hash(
+    conn: &mut ConnectionManager,
+    town_name: &str,
+) -> Result<HashMigrationStats> {
+    let mut stats = HashMigrationStats::default();
+
+    info!(
+        "Starting JSON-to-Hash migration for town '{}'",
+        town_name
+    );
+
+    // Migrate agent keys
+    let agent_pattern = format!("tt:{}:agent:*", town_name);
+    let agent_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&agent_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in agent_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "hash" {
+            stats.already_hash += 1;
+            continue;
+        }
+        if key_type != "string" {
+            warn!("Unexpected key type '{}' for {}, skipping", key_type, key);
+            continue;
+        }
+
+        match migrate_agent_to_hash(conn, &key).await {
+            Ok(_) => stats.agents_migrated += 1,
+            Err(e) => {
+                warn!("Failed to migrate agent {}: {}", key, e);
+                stats.errors.push(key);
+            }
+        }
+    }
+
+    // Migrate task keys
+    let task_pattern = format!("tt:{}:task:*", town_name);
+    let task_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&task_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in task_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "hash" {
+            stats.already_hash += 1;
+            continue;
+        }
+        if key_type != "string" {
+            warn!("Unexpected key type '{}' for {}, skipping", key_type, key);
+            continue;
+        }
+
+        match migrate_task_to_hash(conn, &key).await {
+            Ok(_) => stats.tasks_migrated += 1,
+            Err(e) => {
+                warn!("Failed to migrate task {}: {}", key, e);
+                stats.errors.push(key);
+            }
+        }
+    }
+
+    info!(
+        "JSON-to-Hash migration complete: {} agents, {} tasks migrated, {} already hash, {} errors",
+        stats.agents_migrated,
+        stats.tasks_migrated,
+        stats.already_hash,
+        stats.errors.len()
+    );
+
+    Ok(stats)
+}
+
+/// Preview JSON-to-Hash migration without making changes.
+///
+/// Returns the list of keys that would be migrated.
+pub async fn preview_hash_migration(
+    conn: &mut ConnectionManager,
+    town_name: &str,
+) -> Result<Vec<String>> {
+    let mut preview = Vec::new();
+
+    // Check agent keys
+    let agent_pattern = format!("tt:{}:agent:*", town_name);
+    let agent_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&agent_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in agent_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "string" {
+            preview.push(key);
+        }
+    }
+
+    // Check task keys
+    let task_pattern = format!("tt:{}:task:*", town_name);
+    let task_keys: Vec<String> = redis::cmd("KEYS")
+        .arg(&task_pattern)
+        .query_async(conn)
+        .await?;
+
+    for key in task_keys {
+        let key_type: String = redis::cmd("TYPE").arg(&key).query_async(conn).await?;
+        if key_type == "string" {
+            preview.push(key);
+        }
+    }
+
+    Ok(preview)
+}
+
+// =============================================================================
+// Town Isolation Migration (existing code)
+// =============================================================================
+
 /// Preview migration without making changes.
 ///
 /// Returns the list of keys that would be migrated.

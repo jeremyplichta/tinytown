@@ -70,7 +70,8 @@ pub use error::{Error, Result};
 pub use global_config::GlobalConfig;
 pub use message::{ConfirmationType, Message, MessageId, MessageType, Priority};
 pub use migration::{
-    MigrationStats, migrate_to_town_isolation, needs_migration, preview_migration,
+    HashMigrationStats, MigrationStats, migrate_json_to_hash, migrate_to_town_isolation,
+    needs_hash_migration, needs_migration, preview_hash_migration, preview_migration,
 };
 pub use plan::{TaskEntry, TasksFile, TasksMeta};
 pub use redis_manager::RedisManager;

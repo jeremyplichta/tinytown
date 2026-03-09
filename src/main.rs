@@ -276,6 +276,10 @@ enum Commands {
         /// Skip confirmation prompt
         #[arg(long)]
         force: bool,
+
+        /// Migrate JSON string storage to Redis Hash format
+        #[arg(long)]
+        hash: bool,
     },
 }
 
@@ -596,7 +600,7 @@ fn strip_ansi_codes(s: &str) -> String {
             if chars.peek() == Some(&'[') {
                 chars.next(); // consume '['
                 // Skip until we hit 'm' (end of color code)
-                while let Some(ch) = chars.next() {
+                for ch in chars.by_ref() {
                     if ch == 'm' {
                         break;
                     }
@@ -621,12 +625,12 @@ fn clean_agent_round_logs(log_dir: &std::path::Path, agent_name: &str) -> usize 
     if let Ok(entries) = std::fs::read_dir(log_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if filename.starts_with(&prefix) && filename.ends_with(".log") {
-                    if std::fs::remove_file(&path).is_ok() {
-                        deleted += 1;
-                    }
-                }
+            if let Some(filename) = path.file_name().and_then(|n| n.to_str())
+                && filename.starts_with(&prefix)
+                && filename.ends_with(".log")
+                && std::fs::remove_file(&path).is_ok()
+            {
+                deleted += 1;
             }
         }
     }
@@ -648,20 +652,21 @@ fn find_latest_round_log(
     if let Ok(entries) = std::fs::read_dir(log_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
-                if filename.starts_with(&prefix) && filename.ends_with(".log") {
-                    // Extract round number from filename
-                    let num_part = &filename[prefix.len()..filename.len() - 4]; // Remove prefix and ".log"
-                    if let Ok(round_num) = num_part.parse::<u32>() {
-                        match &latest {
-                            Some((current_max, _)) if round_num > *current_max => {
-                                latest = Some((round_num, path));
-                            }
-                            None => {
-                                latest = Some((round_num, path));
-                            }
-                            _ => {}
+            if let Some(filename) = path.file_name().and_then(|n| n.to_str())
+                && filename.starts_with(&prefix)
+                && filename.ends_with(".log")
+            {
+                // Extract round number from filename
+                let num_part = &filename[prefix.len()..filename.len() - 4]; // Remove prefix and ".log"
+                if let Ok(round_num) = num_part.parse::<u32>() {
+                    match &latest {
+                        Some((current_max, _)) if round_num > *current_max => {
+                            latest = Some((round_num, path));
                         }
+                        None => {
+                            latest = Some((round_num, path));
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -3463,8 +3468,15 @@ Now, help the user orchestrate their project!
             }
         },
 
-        Commands::Migrate { dry_run, force } => {
-            use tinytown::{migrate_to_town_isolation, needs_migration, preview_migration};
+        Commands::Migrate {
+            dry_run,
+            force,
+            hash,
+        } => {
+            use tinytown::{
+                migrate_json_to_hash, migrate_to_town_isolation, needs_hash_migration,
+                needs_migration, preview_hash_migration, preview_migration,
+            };
 
             let town = Town::connect(&cli.town).await?;
             let config = town.config();
@@ -3475,80 +3487,148 @@ Now, help the user orchestrate their project!
             let client = redis::Client::open(redis_url)?;
             let mut conn = redis::aio::ConnectionManager::new(client).await?;
 
-            // Check if migration is needed
-            let needs_mig = needs_migration(&mut conn).await?;
-            if !needs_mig {
-                info!("✅ No migration needed - all keys already use town isolation format");
-                info!("   Town: {}", town_name);
-                return Ok(());
-            }
+            if hash {
+                // JSON-to-Hash migration
+                let needs_mig = needs_hash_migration(&mut conn, town_name).await?;
+                if !needs_mig {
+                    info!("✅ No JSON-to-Hash migration needed - all keys already use Hash storage");
+                    info!("   Town: {}", town_name);
+                    return Ok(());
+                }
 
-            if dry_run {
-                // Preview mode
-                info!("🔍 Migration Preview (dry run)");
-                info!("   Town: {}", town_name);
-                info!("");
+                if dry_run {
+                    info!("🔍 JSON-to-Hash Migration Preview (dry run)");
+                    info!("   Town: {}", town_name);
+                    info!("");
 
-                let preview = preview_migration(&mut conn).await?;
-                if preview.is_empty() {
-                    info!("   No old-format keys found.");
-                } else {
-                    info!("   Keys to migrate:");
-                    for (old_key, new_pattern) in &preview {
-                        let new_key = new_pattern.replace("<town>", town_name);
-                        info!("   {} → {}", old_key, new_key);
+                    let preview = preview_hash_migration(&mut conn, town_name).await?;
+                    if preview.is_empty() {
+                        info!("   No JSON string keys found.");
+                    } else {
+                        info!("   Keys to convert to Hash:");
+                        for key in &preview {
+                            info!("   {} (string → hash)", key);
+                        }
+                        info!("");
+                        info!("   Total: {} key(s) would be migrated", preview.len());
+                        info!("");
+                        info!(
+                            "   Run 'tt migrate --hash' (without --dry-run) to perform migration."
+                        );
                     }
+                } else {
+                    if !force {
+                        info!("⚠️  JSON-to-Hash Migration Warning");
+                        info!("");
+                        info!("   This will convert JSON string storage to Redis Hash format.");
+                        info!("   Benefits: atomic field updates, memory efficiency, partial reads.");
+                        info!("");
+                        info!("   This operation cannot be undone.");
+                        info!("");
+                        info!("   Run with --force to skip this prompt, or --dry-run to preview.");
+                        info!("");
+
+                        eprint!("   Continue? [y/N]: ");
+                        let mut input = String::new();
+                        std::io::stdin().read_line(&mut input)?;
+                        if !input.trim().eq_ignore_ascii_case("y") {
+                            info!("   Migration cancelled.");
+                            return Ok(());
+                        }
+                    }
+
+                    info!("🔄 Migrating JSON strings to Redis Hashes...");
+                    info!("   Town: {}", town_name);
+
+                    let stats = migrate_json_to_hash(&mut conn, town_name).await?;
+
                     info!("");
-                    info!("   Total: {} key(s) would be migrated", preview.len());
-                    info!("");
-                    info!("   Run 'tt migrate' (without --dry-run) to perform migration.");
+                    info!("✅ JSON-to-Hash migration complete!");
+                    info!("   Agents migrated: {}", stats.agents_migrated);
+                    info!("   Tasks migrated:  {}", stats.tasks_migrated);
+                    info!("   Already hash:    {}", stats.already_hash);
+
+                    if !stats.errors.is_empty() {
+                        warn!("");
+                        warn!("   ⚠️  {} key(s) failed to migrate:", stats.errors.len());
+                        for key in &stats.errors {
+                            warn!("      - {}", key);
+                        }
+                    }
                 }
             } else {
-                // Actual migration
-                if !force {
-                    info!("⚠️  Migration Warning");
-                    info!("");
-                    info!("   This will migrate old Redis keys to the new town-isolated format:");
-                    info!("   tt:type:id → tt:{}:type:id", town_name);
-                    info!("");
-                    info!("   This operation cannot be undone.");
-                    info!("");
-                    info!("   Run with --force to skip this prompt, or --dry-run to preview.");
-                    info!("");
-
-                    // Use stderr for prompt, stdin for input
-                    eprint!("   Continue? [y/N]: ");
-                    let mut input = String::new();
-                    std::io::stdin().read_line(&mut input)?;
-                    if !input.trim().eq_ignore_ascii_case("y") {
-                        info!("   Migration cancelled.");
-                        return Ok(());
-                    }
+                // Town isolation migration (existing behavior)
+                let needs_mig = needs_migration(&mut conn).await?;
+                if !needs_mig {
+                    info!("✅ No migration needed - all keys already use town isolation format");
+                    info!("   Town: {}", town_name);
+                    return Ok(());
                 }
 
-                info!("🔄 Migrating to town isolation...");
-                info!("   Town: {}", town_name);
+                if dry_run {
+                    info!("🔍 Migration Preview (dry run)");
+                    info!("   Town: {}", town_name);
+                    info!("");
 
-                let stats = migrate_to_town_isolation(&mut conn, town_name).await?;
+                    let preview = preview_migration(&mut conn).await?;
+                    if preview.is_empty() {
+                        info!("   No old-format keys found.");
+                    } else {
+                        info!("   Keys to migrate:");
+                        for (old_key, new_pattern) in &preview {
+                            let new_key = new_pattern.replace("<town>", town_name);
+                            info!("   {} → {}", old_key, new_key);
+                        }
+                        info!("");
+                        info!("   Total: {} key(s) would be migrated", preview.len());
+                        info!("");
+                        info!("   Run 'tt migrate' (without --dry-run) to perform migration.");
+                    }
+                } else {
+                    if !force {
+                        info!("⚠️  Migration Warning");
+                        info!("");
+                        info!("   This will migrate old Redis keys to the new town-isolated format:");
+                        info!("   tt:type:id → tt:{}:type:id", town_name);
+                        info!("");
+                        info!("   This operation cannot be undone.");
+                        info!("");
+                        info!("   Run with --force to skip this prompt, or --dry-run to preview.");
+                        info!("");
 
-                info!("");
-                info!("✅ Migration complete!");
-                info!("   Agents migrated:  {}", stats.agents_migrated);
-                info!("   Inboxes migrated: {}", stats.inboxes_migrated);
-                info!("   Tasks migrated:   {}", stats.tasks_migrated);
-                info!(
-                    "   Other keys:       {}",
-                    stats.urgent_migrated
-                        + stats.activity_migrated
-                        + stats.stop_migrated
-                        + stats.backlog_migrated
-                );
+                        eprint!("   Continue? [y/N]: ");
+                        let mut input = String::new();
+                        std::io::stdin().read_line(&mut input)?;
+                        if !input.trim().eq_ignore_ascii_case("y") {
+                            info!("   Migration cancelled.");
+                            return Ok(());
+                        }
+                    }
 
-                if !stats.errors.is_empty() {
-                    warn!("");
-                    warn!("   ⚠️  {} key(s) failed to migrate:", stats.errors.len());
-                    for key in &stats.errors {
-                        warn!("      - {}", key);
+                    info!("🔄 Migrating to town isolation...");
+                    info!("   Town: {}", town_name);
+
+                    let stats = migrate_to_town_isolation(&mut conn, town_name).await?;
+
+                    info!("");
+                    info!("✅ Migration complete!");
+                    info!("   Agents migrated:  {}", stats.agents_migrated);
+                    info!("   Inboxes migrated: {}", stats.inboxes_migrated);
+                    info!("   Tasks migrated:   {}", stats.tasks_migrated);
+                    info!(
+                        "   Other keys:       {}",
+                        stats.urgent_migrated
+                            + stats.activity_migrated
+                            + stats.stop_migrated
+                            + stats.backlog_migrated
+                    );
+
+                    if !stats.errors.is_empty() {
+                        warn!("");
+                        warn!("   ⚠️  {} key(s) failed to migrate:", stats.errors.len());
+                        for key in &stats.errors {
+                            warn!("      - {}", key);
+                        }
                     }
                 }
             }
