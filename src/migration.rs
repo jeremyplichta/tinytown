@@ -82,9 +82,9 @@ pub async fn needs_migration(conn: &mut ConnectionManager) -> Result<bool> {
         // Filter out keys that are already namespaced (have 4 parts)
         for key in keys {
             let parts: Vec<&str> = key.split(':').collect();
-            // Old format: tt:type:uuid (3 parts)
-            // New format: tt:town:type:uuid (4 parts)
-            if parts.len() == 3 && parts[0] == "tt" {
+            // Old format: tt:type:uuid (3 parts) or tt:type (2 parts like tt:backlog, tt:broadcast)
+            // New format: tt:town:type:uuid (4 parts) or tt:town:type (3 parts)
+            if parts[0] == "tt" && (parts.len() == 2 || parts.len() == 3) {
                 debug!("Found old-format key: {}", key);
                 return Ok(true);
             }

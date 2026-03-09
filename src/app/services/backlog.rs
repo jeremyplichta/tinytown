@@ -112,10 +112,9 @@ impl BacklogService {
         let agent_handle = town.agent(agent_name).await?;
         let agent_id = agent_handle.id();
 
-        // Update task assignment and mark as in-flight (running)
+        // Update task assignment (consistent with tt assign - agent will start() when working)
         if let Some(mut task) = channel.get_task(task_id).await? {
             task.assign(agent_id);
-            task.start(); // Mark as in-flight with started_at timestamp
             channel.set_task(&task).await?;
         }
 
@@ -154,7 +153,6 @@ impl BacklogService {
         while let Some(task_id) = channel.backlog_pop().await? {
             if let Some(mut task) = channel.get_task(task_id).await? {
                 task.assign(agent_id);
-                task.start(); // Mark as in-flight with started_at timestamp
                 channel.set_task(&task).await?;
 
                 let msg = Message::new(

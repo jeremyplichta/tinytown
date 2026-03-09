@@ -1246,7 +1246,10 @@ async fn main() -> Result<()> {
             let agents = town.list_agents().await;
             info!("🤖 Agents: {}", agents.len());
 
-            for agent in agents {
+            // Fetch tasks once before the agent loop to avoid N+1 Redis calls
+            let all_tasks = town.channel().list_tasks().await.unwrap_or_default();
+
+            for agent in &agents {
                 let inbox_len = town.channel().inbox_len(agent.id).await.unwrap_or(0);
                 let peek_count = std::cmp::min(inbox_len, 200) as isize;
                 let inbox_messages = if peek_count > 0 {
@@ -1277,14 +1280,10 @@ async fn main() -> Result<()> {
                     format!("{}s", uptime.num_seconds())
                 };
 
-                // Get running tasks assigned to this agent (more reliable than current_task field)
-                let running_tasks: Vec<_> = if let Ok(all_tasks) = town.channel().list_tasks().await {
-                    all_tasks.into_iter()
-                        .filter(|t| t.assigned_to == Some(agent.id) && t.state == tinytown::TaskState::Running)
-                        .collect()
-                } else {
-                    Vec::new()
-                };
+                // Get running tasks assigned to this agent (using pre-fetched all_tasks)
+                let running_tasks: Vec<_> = all_tasks.iter()
+                    .filter(|t| t.assigned_to == Some(agent.id) && t.state == tinytown::TaskState::Running)
+                    .collect();
 
                 if deep {
                     info!(
@@ -1368,8 +1367,8 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Task summary section
-            let tasks = town.channel().list_tasks().await.unwrap_or_default();
+            // Task summary section (reuse pre-fetched all_tasks)
+            let tasks = &all_tasks;
             let backlog_count = town.channel().backlog_len().await.unwrap_or(0);
 
             // Count by state
@@ -1380,7 +1379,7 @@ async fn main() -> Result<()> {
             let mut failed = 0usize;
             let mut cancelled = 0usize;
 
-            for task in &tasks {
+            for task in tasks {
                 match task.state {
                     tinytown::TaskState::Pending => pending += 1,
                     tinytown::TaskState::Assigned => assigned += 1,
@@ -1418,10 +1417,10 @@ async fn main() -> Result<()> {
                     std::collections::HashMap::new();
                 let mut unassigned_tasks: Vec<&tinytown::Task> = Vec::new();
 
-                for task in &tasks {
+                for task in tasks {
                     if let Some(agent_id) = task.assigned_to {
-                        // Find agent name
-                        let agent_name = town.list_agents().await
+                        // Find agent name (reusing pre-fetched agents list)
+                        let agent_name = agents
                             .iter()
                             .find(|a| a.id == agent_id)
                             .map(|a| a.name.clone())
@@ -3055,10 +3054,9 @@ Now, help the user orchestrate their project!
                     // Get agent
                     let agent_handle = town.agent(&agent).await?;
 
-                    // Assign the task and mark as in-flight
+                    // Assign the task (consistent with tt assign - agent will start() when working)
                     if let Some(mut task) = town.channel().get_task(tid).await? {
                         task.assign(agent_handle.id());
-                        task.start(); // Mark as in-flight with started_at timestamp
                         town.channel().set_task(&task).await?;
 
                         // Send assignment message
