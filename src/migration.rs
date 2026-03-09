@@ -92,6 +92,14 @@ pub async fn needs_migration(conn: &mut ConnectionManager) -> Result<bool> {
 }
 
 /// Scan for old-format keys matching a pattern.
+///
+/// Old format keys have 2 or 3 colon-separated segments:
+/// - 2 parts: `tt:backlog`, `tt:broadcast`
+/// - 3 parts: `tt:agent:<uuid>`, `tt:inbox:<uuid>`, etc.
+///
+/// New format keys have 3 or 4 segments (with town name):
+/// - 3 parts: `tt:<town>:backlog`
+/// - 4 parts: `tt:<town>:agent:<uuid>`
 async fn scan_old_keys(conn: &mut ConnectionManager, pattern: &str) -> Result<Vec<String>> {
     let mut cursor: u64 = 0;
     let mut all_keys = Vec::new();
@@ -106,10 +114,12 @@ async fn scan_old_keys(conn: &mut ConnectionManager, pattern: &str) -> Result<Ve
             .query_async(conn)
             .await?;
 
-        // Filter to only old-format keys (3 parts)
+        // Filter to only old-format keys (2 or 3 parts)
         for key in keys {
             let parts: Vec<&str> = key.split(':').collect();
-            if parts.len() == 3 && parts[0] == "tt" {
+            // Old format: tt:type (2 parts) or tt:type:uuid (3 parts)
+            // New format: tt:town:type (3 parts) or tt:town:type:uuid (4 parts)
+            if parts[0] == "tt" && (parts.len() == 2 || parts.len() == 3) {
                 all_keys.push(key);
             }
         }
@@ -124,22 +134,33 @@ async fn scan_old_keys(conn: &mut ConnectionManager, pattern: &str) -> Result<Ve
 }
 
 /// Migrate a single key to the new format.
+///
+/// Handles both 2-part and 3-part old-format keys:
+/// - 2 parts: `tt:backlog` -> `tt:<town>:backlog`
+/// - 3 parts: `tt:agent:<uuid>` -> `tt:<town>:agent:<uuid>`
 async fn migrate_key(
     conn: &mut ConnectionManager,
     old_key: &str,
     town_name: &str,
 ) -> Result<String> {
     let parts: Vec<&str> = old_key.split(':').collect();
-    if parts.len() != 3 || parts[0] != "tt" {
+    if parts[0] != "tt" || (parts.len() != 2 && parts.len() != 3) {
         return Err(Error::Migration(format!(
             "Invalid old-format key: {}",
             old_key
         )));
     }
 
-    let key_type = parts[1];
-    let id = parts[2];
-    let new_key = format!("tt:{}:{}:{}", town_name, key_type, id);
+    let new_key = if parts.len() == 2 {
+        // 2-part key like tt:backlog -> tt:<town>:backlog
+        let key_type = parts[1];
+        format!("tt:{}:{}", town_name, key_type)
+    } else {
+        // 3-part key like tt:agent:<uuid> -> tt:<town>:agent:<uuid>
+        let key_type = parts[1];
+        let id = parts[2];
+        format!("tt:{}:{}:{}", town_name, key_type, id)
+    };
 
     // Rename the key atomically
     let _: () = conn.rename(old_key, &new_key).await?;
@@ -282,7 +303,12 @@ pub async fn preview_migration(conn: &mut ConnectionManager) -> Result<Vec<(Stri
         let keys = scan_old_keys(conn, pattern).await?;
         for key in keys {
             let parts: Vec<&str> = key.split(':').collect();
-            if parts.len() == 3 {
+            if parts.len() == 2 {
+                // 2-part key like tt:backlog
+                let key_type = parts[1];
+                preview.push((key.clone(), format!("tt:<town>:{}", key_type)));
+            } else if parts.len() == 3 {
+                // 3-part key like tt:agent:<uuid>
                 let key_type = parts[1];
                 let id = parts[2];
                 preview.push((key.clone(), format!("tt:<town>:{}:{}", key_type, id)));
@@ -290,10 +316,14 @@ pub async fn preview_migration(conn: &mut ConnectionManager) -> Result<Vec<(Stri
         }
     }
 
-    // Check backlog
+    // Check backlog (also check for tt:broadcast)
     let backlog_exists: bool = conn.exists("tt:backlog").await?;
     if backlog_exists {
         preview.push(("tt:backlog".to_string(), "tt:<town>:backlog".to_string()));
+    }
+    let broadcast_exists: bool = conn.exists("tt:broadcast").await?;
+    if broadcast_exists {
+        preview.push(("tt:broadcast".to_string(), "tt:<town>:broadcast".to_string()));
     }
 
     Ok(preview)

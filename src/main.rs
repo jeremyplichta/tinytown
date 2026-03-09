@@ -1535,7 +1535,8 @@ async fn main() -> Result<()> {
                 let log_dir = cli.town.join(".tt/logs");
                 if log_dir.exists() {
                     let mut shown_logs = std::collections::HashSet::new();
-                    for agent in town.list_agents().await {
+                    // Reuse the agents variable from earlier to avoid redundant Redis call
+                    for agent in &agents {
                         let log_file = log_dir.join(format!("{}.log", agent.name));
                         if log_file.exists() && !shown_logs.contains(&agent.name) {
                             shown_logs.insert(agent.name.clone());

@@ -384,7 +384,7 @@ pub fn task_complete_tool(state: Arc<McpState>) -> Tool {
                             Err(e) => Ok(error_response(e.to_string())),
                         }
                     }
-                    Ok(None) => Ok(error_response(format!("Task {} not found", input.task_id))),
+                    Ok(None) => Ok(error_response(format!("Task {} not found", task_id))),
                     Err(e) => Ok(error_response(e.to_string())),
                 }
             }

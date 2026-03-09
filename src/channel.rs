@@ -306,8 +306,9 @@ impl Channel {
 
     /// Store agent state in Redis using Hash for atomic field updates.
     ///
-    /// Uses HSET to store each agent field separately, enabling atomic updates
-    /// to individual fields (like state, heartbeat) without rewriting the entire object.
+    /// Uses a Redis pipeline to atomically perform HDEL (for None fields) and HSET
+    /// operations, preventing race conditions where concurrent readers might see
+    /// partially-updated state.
     pub async fn set_agent_state(&self, agent: &crate::agent::Agent) -> Result<()> {
         let mut conn = self.conn.clone();
         let key = self.state_key(agent.id);
@@ -344,16 +345,24 @@ impl Channel {
             ),
         ];
 
-        // Handle optional current_task - use HDEL to clear stale values when None
+        // Collect fields to delete when None
+        let mut fields_to_delete: Vec<&str> = Vec::new();
+
+        // Handle optional current_task
         if let Some(ref task_id) = agent.current_task {
             fields.push(("current_task".to_string(), task_id.to_string()));
         } else {
-            // Delete the field if it's None to avoid stale values persisting
-            let _: () = conn.hdel(&key, "current_task").await?;
+            fields_to_delete.push("current_task");
         }
 
-        // Use HSET with multiple field-value pairs
-        let _: () = conn.hset_multiple(&key, &fields).await?;
+        // Use a pipeline to make HDEL + HSET atomic
+        let mut pipe = redis::pipe();
+        if !fields_to_delete.is_empty() {
+            pipe.hdel(&key, &fields_to_delete);
+        }
+        pipe.hset_multiple(&key, &fields);
+        let _: () = pipe.query_async(&mut conn).await?;
+
         Ok(())
     }
 
@@ -537,8 +546,9 @@ impl Channel {
 
     /// Store a task in Redis using Hash for atomic field updates.
     ///
-    /// Uses HSET to store each task field separately, enabling atomic updates
-    /// to individual fields without rewriting the entire object.
+    /// Uses a Redis pipeline to atomically perform HDEL (for None fields) and HSET
+    /// operations, preventing race conditions where concurrent readers might see
+    /// partially-updated state.
     pub async fn set_task(&self, task: &crate::task::Task) -> Result<()> {
         let mut conn = self.conn.clone();
         let key = self.task_key(task.id);
@@ -558,36 +568,44 @@ impl Channel {
             ("tags".to_string(), serde_json::to_string(&task.tags)?),
         ];
 
-        // Handle optional fields - use HDEL to clear stale values when None
-        // This prevents old values from persisting when fields transition from Some to None
+        // Collect fields to delete when None
+        let mut fields_to_delete: Vec<&str> = Vec::new();
+
+        // Handle optional fields
         if let Some(ref agent_id) = task.assigned_to {
             fields.push(("assigned_to".to_string(), agent_id.to_string()));
         } else {
-            let _: () = conn.hdel(&key, "assigned_to").await?;
+            fields_to_delete.push("assigned_to");
         }
         if let Some(ref started_at) = task.started_at {
             fields.push(("started_at".to_string(), started_at.to_rfc3339()));
         } else {
-            let _: () = conn.hdel(&key, "started_at").await?;
+            fields_to_delete.push("started_at");
         }
         if let Some(ref completed_at) = task.completed_at {
             fields.push(("completed_at".to_string(), completed_at.to_rfc3339()));
         } else {
-            let _: () = conn.hdel(&key, "completed_at").await?;
+            fields_to_delete.push("completed_at");
         }
         if let Some(ref result) = task.result {
             fields.push(("result".to_string(), result.clone()));
         } else {
-            let _: () = conn.hdel(&key, "result").await?;
+            fields_to_delete.push("result");
         }
         if let Some(ref parent_id) = task.parent_id {
             fields.push(("parent_id".to_string(), parent_id.to_string()));
         } else {
-            let _: () = conn.hdel(&key, "parent_id").await?;
+            fields_to_delete.push("parent_id");
         }
 
-        // Use HSET with multiple field-value pairs
-        let _: () = conn.hset_multiple(&key, &fields).await?;
+        // Use a pipeline to make HDEL + HSET atomic
+        let mut pipe = redis::pipe();
+        if !fields_to_delete.is_empty() {
+            pipe.hdel(&key, &fields_to_delete);
+        }
+        pipe.hset_multiple(&key, &fields);
+        let _: () = pipe.query_async(&mut conn).await?;
+
         Ok(())
     }
 
