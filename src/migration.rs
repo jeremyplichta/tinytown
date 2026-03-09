@@ -463,12 +463,13 @@ async fn migrate_task_to_hash(conn: &mut ConnectionManager, key: &str) -> Result
     }
     // Tags remain as JSON array string
     if let Some(tags) = task.get("tags")
-        && tags.is_array() {
-            fields.push((
-                "tags".to_string(),
-                serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string()),
-            ));
-        }
+        && tags.is_array()
+    {
+        fields.push((
+            "tags".to_string(),
+            serde_json::to_string(tags).unwrap_or_else(|_| "[]".to_string()),
+        ));
+    }
 
     if fields.is_empty() {
         return Err(Error::Migration(format!(
