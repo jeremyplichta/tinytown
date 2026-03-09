@@ -111,6 +111,10 @@ enum Commands {
         /// Show deep status with recent agent activity
         #[arg(long)]
         deep: bool,
+
+        /// Show detailed task breakdown by state and agent
+        #[arg(long)]
+        tasks: bool,
     },
 
     /// Start the town (Redis server)
@@ -118,6 +122,17 @@ enum Commands {
 
     /// Stop the town
     Stop,
+
+    /// Reset all town state (clear all agents, tasks, messages)
+    Reset {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+
+        /// Only reset agent-related state (agents and inboxes), preserving tasks
+        #[arg(long)]
+        agents_only: bool,
+    },
 
     /// Stop a specific agent gracefully
     Kill {
@@ -280,6 +295,12 @@ enum BacklogAction {
     AssignAll {
         /// Agent name to assign all tasks to
         agent: String,
+    },
+
+    /// Remove a task from the backlog
+    Remove {
+        /// Task ID to remove
+        task_id: String,
     },
 }
 
@@ -937,7 +958,7 @@ async fn main() -> Result<()> {
             info!("📋 Assigned task {} to agent '{}'", task_id, agent);
         }
 
-        Commands::Status { deep } => {
+        Commands::Status { deep, tasks: show_tasks } => {
             let town = Town::connect(&cli.town).await?;
             let config = town.config();
 
@@ -979,6 +1000,23 @@ async fn main() -> Result<()> {
                     format!("{}s", uptime.num_seconds())
                 };
 
+                // Get current task description if agent is working on one
+                let current_task_desc = if let Some(task_id) = agent.current_task {
+                    if let Ok(Some(task)) = town.channel().get_task(task_id).await {
+                        // Truncate description for display
+                        let desc = &task.description;
+                        if desc.len() > 60 {
+                            Some(format!("{}...", &desc[..57]))
+                        } else {
+                            Some(desc.clone())
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
                 if deep {
                     info!(
                         "   {} ({:?}) - {} pending, {} rounds, uptime {}",
@@ -992,6 +1030,10 @@ async fn main() -> Result<()> {
                         breakdown.confirmations,
                         sampled_note
                     );
+                    // Show current in-flight task if working
+                    if let Some(ref task_desc) = current_task_desc {
+                        info!("      └─ 🔄 Working on: {}", task_desc);
+                    }
                     // Get recent activity from Redis
                     if let Ok(Some(activity)) = town.channel().get_agent_activity(agent.id).await {
                         for line in activity.lines().take(5) {
@@ -999,16 +1041,136 @@ async fn main() -> Result<()> {
                         }
                     }
                 } else {
-                    info!(
-                        "   {} ({:?}) - {} pending (🔴 {} 🟡 {} 🟢 {} ⚪ {})",
-                        agent.name,
-                        agent.state,
-                        inbox_len,
-                        breakdown.tasks + breakdown.other_actionable,
-                        breakdown.queries,
-                        breakdown.informational,
-                        breakdown.confirmations
-                    );
+                    // Show current task indicator for working agents in non-deep mode
+                    if let Some(ref task_desc) = current_task_desc {
+                        info!(
+                            "   {} ({:?}) - {} pending (🔴 {} 🟡 {} 🟢 {} ⚪ {})",
+                            agent.name,
+                            agent.state,
+                            inbox_len,
+                            breakdown.tasks + breakdown.other_actionable,
+                            breakdown.queries,
+                            breakdown.informational,
+                            breakdown.confirmations
+                        );
+                        info!("      └─ 🔄 {}", task_desc);
+                    } else {
+                        info!(
+                            "   {} ({:?}) - {} pending (🔴 {} 🟡 {} 🟢 {} ⚪ {})",
+                            agent.name,
+                            agent.state,
+                            inbox_len,
+                            breakdown.tasks + breakdown.other_actionable,
+                            breakdown.queries,
+                            breakdown.informational,
+                            breakdown.confirmations
+                        );
+                    }
+                }
+            }
+
+            // Task summary section
+            let tasks = town.channel().list_tasks().await.unwrap_or_default();
+            let backlog_count = town.channel().backlog_len().await.unwrap_or(0);
+
+            // Count by state
+            let mut pending = 0usize;
+            let mut assigned = 0usize;
+            let mut running = 0usize;
+            let mut completed = 0usize;
+            let mut failed = 0usize;
+            let mut cancelled = 0usize;
+
+            for task in &tasks {
+                match task.state {
+                    tinytown::TaskState::Pending => pending += 1,
+                    tinytown::TaskState::Assigned => assigned += 1,
+                    tinytown::TaskState::Running => running += 1,
+                    tinytown::TaskState::Completed => completed += 1,
+                    tinytown::TaskState::Failed => failed += 1,
+                    tinytown::TaskState::Cancelled => cancelled += 1,
+                }
+            }
+
+            let total = tasks.len();
+            let in_flight = assigned + running;
+            let done = completed + failed + cancelled;
+            // Pending includes backlog items plus Pending-state tasks not in backlog
+            let pending_total = pending + backlog_count;
+
+            info!("📋 Tasks: {} total ({} pending, {} in-flight, {} done)",
+                total, pending_total, in_flight, done);
+
+            // Show detailed task breakdown when --tasks flag is passed
+            if show_tasks {
+                info!("");
+                info!("📊 Task Breakdown by State:");
+                info!("   ⏳ Pending:   {}", pending);
+                info!("   📌 Assigned:  {}", assigned);
+                info!("   🔄 Running:   {}", running);
+                info!("   ✅ Completed: {}", completed);
+                info!("   ❌ Failed:    {}", failed);
+                info!("   🚫 Cancelled: {}", cancelled);
+                info!("   📋 Backlog:   {}", backlog_count);
+
+                // Group tasks by agent
+                let mut tasks_by_agent: std::collections::HashMap<String, Vec<&tinytown::Task>> =
+                    std::collections::HashMap::new();
+                let mut unassigned_tasks: Vec<&tinytown::Task> = Vec::new();
+
+                for task in &tasks {
+                    if let Some(agent_id) = task.assigned_to {
+                        // Find agent name
+                        let agent_name = town.list_agents().await
+                            .iter()
+                            .find(|a| a.id == agent_id)
+                            .map(|a| a.name.clone())
+                            .unwrap_or_else(|| agent_id.to_string());
+                        tasks_by_agent.entry(agent_name).or_default().push(task);
+                    } else {
+                        unassigned_tasks.push(task);
+                    }
+                }
+
+                // Show tasks by agent
+                info!("");
+                info!("📋 Tasks by Agent:");
+                for (agent_name, agent_tasks) in &tasks_by_agent {
+                    let active_count = agent_tasks.iter()
+                        .filter(|t| !t.state.is_terminal())
+                        .count();
+                    let done_count = agent_tasks.iter()
+                        .filter(|t| t.state.is_terminal())
+                        .count();
+                    info!("   {} ({} active, {} done):", agent_name, active_count, done_count);
+                    for task in agent_tasks.iter().take(5) {
+                        let state_icon = match task.state {
+                            tinytown::TaskState::Pending => "⏳",
+                            tinytown::TaskState::Assigned => "📌",
+                            tinytown::TaskState::Running => "🔄",
+                            tinytown::TaskState::Completed => "✅",
+                            tinytown::TaskState::Failed => "❌",
+                            tinytown::TaskState::Cancelled => "🚫",
+                        };
+                        let desc = task.description.chars().take(50).collect::<String>();
+                        let truncated = if task.description.len() > 50 { "..." } else { "" };
+                        info!("      {} {} {}{}", state_icon, task.id, desc, truncated);
+                    }
+                    if agent_tasks.len() > 5 {
+                        info!("      ... and {} more task(s)", agent_tasks.len() - 5);
+                    }
+                }
+
+                if !unassigned_tasks.is_empty() {
+                    info!("   (unassigned) ({} tasks):", unassigned_tasks.len());
+                    for task in unassigned_tasks.iter().take(5) {
+                        let desc = task.description.chars().take(50).collect::<String>();
+                        let truncated = if task.description.len() > 50 { "..." } else { "" };
+                        info!("      ⏳ {} {}{}", task.id, desc, truncated);
+                    }
+                    if unassigned_tasks.len() > 5 {
+                        info!("      ... and {} more task(s)", unassigned_tasks.len() - 5);
+                    }
                 }
             }
 
@@ -1200,6 +1362,58 @@ async fn main() -> Result<()> {
 
         Commands::Stop => {
             info!("👋 Town stopped (Redis will be cleaned up)");
+        }
+
+        Commands::Reset { force, agents_only } => {
+            let town = Town::connect(&cli.town).await?;
+            let config = town.config();
+
+            // Show what will be deleted
+            let agents = town.list_agents().await;
+
+            if agents_only {
+                info!("🗑️  Resetting agents in town '{}'", config.name);
+                info!("   This will delete:");
+                info!("   - {} agent(s) and their inboxes", agents.len());
+                info!("   Tasks and backlog will be preserved.");
+
+                if !force {
+                    info!("");
+                    info!("⚠️  This action cannot be undone!");
+                    info!("   Run with --force to confirm: tt reset --agents-only --force");
+                    return Ok(());
+                }
+
+                // Perform agents-only reset
+                let deleted = town.channel().reset_agents_only().await?;
+
+                info!("");
+                info!("✅ Reset complete: deleted {} Redis keys (agents only)", deleted);
+                info!("   Run 'tt spawn <name>' to create new agents");
+            } else {
+                let tasks = town.channel().list_tasks().await.unwrap_or_default();
+                let backlog_len = town.channel().backlog_len().await.unwrap_or(0);
+
+                info!("🗑️  Resetting town '{}'", config.name);
+                info!("   This will delete:");
+                info!("   - {} agent(s)", agents.len());
+                info!("   - {} task(s)", tasks.len());
+                info!("   - {} backlog item(s)", backlog_len);
+
+                if !force {
+                    info!("");
+                    info!("⚠️  This action cannot be undone!");
+                    info!("   Run with --force to confirm: tt reset --force");
+                    return Ok(());
+                }
+
+                // Perform the full reset
+                let deleted = town.channel().reset_all().await?;
+
+                info!("");
+                info!("✅ Reset complete: deleted {} Redis keys", deleted);
+                info!("   Run 'tt spawn <name>' to create new agents");
+            }
         }
 
         Commands::Inbox { agent } => {
@@ -2301,9 +2515,10 @@ Now, help the user orchestrate their project!
                     // Get agent
                     let agent_handle = town.agent(&agent).await?;
 
-                    // Assign the task
+                    // Assign the task and mark as in-flight
                     if let Some(mut task) = town.channel().get_task(tid).await? {
                         task.assign(agent_handle.id());
+                        task.start(); // Mark as in-flight with started_at timestamp
                         town.channel().set_task(&task).await?;
 
                         // Send assignment message
@@ -2331,6 +2546,7 @@ Now, help the user orchestrate their project!
                     while let Some(tid) = town.channel().backlog_pop().await? {
                         if let Some(mut task) = town.channel().get_task(tid).await? {
                             task.assign(agent_handle.id());
+                            task.start(); // Mark as in-flight with started_at timestamp
                             town.channel().set_task(&task).await?;
 
                             use tinytown::agent::AgentId;
@@ -2351,6 +2567,23 @@ Now, help the user orchestrate their project!
                         info!("📋 Backlog is empty, no tasks to assign");
                     } else {
                         info!("✅ Assigned {} task(s) from backlog to '{}'", count, agent);
+                    }
+                }
+
+                BacklogAction::Remove { task_id } => {
+                    // Parse task ID
+                    let tid: tinytown::TaskId = task_id.parse().map_err(|e| {
+                        tinytown::Error::TaskNotFound(format!("Invalid task ID: {}", e))
+                    })?;
+
+                    // Remove from backlog
+                    let removed = town.channel().backlog_remove(tid).await?;
+                    if removed {
+                        // Also delete the task data from Redis
+                        town.channel().delete_task(tid).await?;
+                        info!("✅ Removed task {} from backlog and deleted task data", task_id);
+                    } else {
+                        info!("❌ Task {} not found in backlog", task_id);
                     }
                 }
             }

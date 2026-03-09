@@ -86,7 +86,7 @@ impl TownhallTestServer {
 impl Drop for TownhallTestServer {
     fn drop(&mut self) {
         // Clean up Redis when test ends
-        let pid_file = self.temp_dir.path().join("redis.pid");
+        let pid_file = self.temp_dir.path().join(".tt/redis.pid");
         if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
             && let Ok(pid) = pid_str.trim().parse::<i32>()
         {

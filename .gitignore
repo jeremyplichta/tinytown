@@ -21,3 +21,6 @@ tinytown.json
 # OS
 .DS_Store
 Thumbs.db
+
+# Tinytown runtime artifacts
+.tt

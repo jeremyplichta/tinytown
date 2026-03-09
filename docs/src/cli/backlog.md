@@ -48,6 +48,14 @@ tt backlog assign-all <AGENT>
 
 Bulk-assigns every backlog task to one agent (useful for manual catch-up or handoff).
 
+### Remove
+
+```bash
+tt backlog remove <TASK_ID>
+```
+
+Removes a task from the backlog without assigning it to any agent. Useful for cleaning up tasks that are no longer needed or were added by mistake.
+
 ## Options
 
 | Option | Short | Description |

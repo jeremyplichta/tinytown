@@ -112,9 +112,10 @@ impl BacklogService {
         let agent_handle = town.agent(agent_name).await?;
         let agent_id = agent_handle.id();
 
-        // Update task assignment
+        // Update task assignment and mark as in-flight (running)
         if let Some(mut task) = channel.get_task(task_id).await? {
             task.assign(agent_id);
+            task.start(); // Mark as in-flight with started_at timestamp
             channel.set_task(&task).await?;
         }
 
@@ -135,6 +136,13 @@ impl BacklogService {
         })
     }
 
+    /// Remove a task from the backlog without assigning it.
+    ///
+    /// Returns true if the task was found and removed, false otherwise.
+    pub async fn remove(channel: &Channel, task_id: TaskId) -> Result<bool> {
+        channel.backlog_remove(task_id).await
+    }
+
     /// Assign all backlog tasks to an agent.
     pub async fn assign_all(town: &Town, agent_name: &str) -> Result<Vec<ClaimResult>> {
         let channel = town.channel();
@@ -146,6 +154,7 @@ impl BacklogService {
         while let Some(task_id) = channel.backlog_pop().await? {
             if let Some(mut task) = channel.get_task(task_id).await? {
                 task.assign(agent_id);
+                task.start(); // Mark as in-flight with started_at timestamp
                 channel.set_task(&task).await?;
 
                 let msg = Message::new(
