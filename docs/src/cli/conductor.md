@@ -168,6 +168,7 @@ You are the **conductor** of Tinytown "my-project"...
 - tt assign <agent> "task" - Assign work
 - tt backlog list - Review unassigned tasks
 - tt backlog claim <task_id> <agent> - Claim backlog task
+- tt task complete <task_id> --result "summary" - Mark task done
 - tt status - Check progress
 
 ## The Reviewer Pattern

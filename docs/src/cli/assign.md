@@ -63,8 +63,8 @@ tt assign tester "Write integration tests"
 ## What Happens
 
 1. **Task created** with state `Pending`
-2. **Task stored** in Redis at `tt:task:<id>`
-3. **Message sent** to agent's inbox at `tt:inbox:<agent-id>`
+2. **Task stored** in Redis at `tt:<town>:task:<id>`
+3. **Message sent** to agent's inbox at `tt:<town>:inbox:<agent-id>`
 4. **Task state** updated to `Assigned`
 
 ## Task Lifecycle After Assignment
@@ -80,9 +80,9 @@ Pending → Assigned → Running → Completed
 Check what's in an agent's inbox:
 
 ```bash
-# Using redis-cli
-redis-cli -s ./redis.sock LLEN tt:inbox:<agent-id>
-redis-cli -s ./redis.sock LRANGE tt:inbox:<agent-id> 0 -1
+# Using redis-cli (replace <town> with your town name)
+redis-cli -s ./redis.sock LLEN tt:<town>:inbox:<agent-id>
+redis-cli -s ./redis.sock LRANGE tt:<town>:inbox:<agent-id> 0 -1
 ```
 
 Or check status:

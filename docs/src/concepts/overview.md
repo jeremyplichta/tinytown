@@ -30,10 +30,10 @@ Tinytown has exactly **5 core types**. That's it. No more, no less.
 | Type | What It Is | Redis Key Pattern |
 |------|------------|-------------------|
 | **[Town](./towns.md)** | The orchestrator that manages everything | N/A (local) |
-| **[Agent](./agents.md)** | A worker that executes tasks | `tt:agent:<id>` |
-| **[Task](./tasks.md)** | A unit of work with lifecycle | `tt:task:<id>` |
+| **[Agent](./agents.md)** | A worker that executes tasks | `tt:<town>:agent:<id>` |
+| **[Task](./tasks.md)** | A unit of work with lifecycle | `tt:<town>:task:<id>` |
 | **[Message](./messages.md)** | Communication between agents | Transient |
-| **[Channel](./channels.md)** | Redis-based message transport | `tt:inbox:<id>` |
+| **[Channel](./channels.md)** | Redis-based message transport | `tt:<town>:inbox:<id>` |
 
 ## How They Work Together
 

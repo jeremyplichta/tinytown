@@ -22,6 +22,7 @@ Displays comprehensive status of the town including:
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--deep` | | Show recent agent activity (stored in Redis) |
+| `--tasks` | | Show detailed task breakdown by state and agent |
 | `--town <PATH>` | `-t` | Town directory (default: `.`) |
 | `--verbose` | `-v` | Enable verbose logging |
 
@@ -67,6 +68,44 @@ Output:
 📊 Stats: rounds completed, uptime since spawn
 ```
 
+### Task Status (detailed task tracking)
+
+```bash
+tt status --tasks
+```
+
+Output:
+```
+🏘️  Town: my-project
+📂 Root: /Users/you/projects/my-project
+📡 Redis: unix:///Users/you/projects/my-project/redis.sock
+🤖 Agents: 2
+   backend (Working) - 0 messages pending
+   reviewer (Idle) - 1 messages pending
+📋 Tasks: 8 total (2 pending, 3 in-flight, 3 done)
+
+📊 Task Breakdown by State:
+   ⏳ Pending:   1
+   📌 Assigned:  1
+   🔄 Running:   2
+   ✅ Completed: 3
+   ❌ Failed:    0
+   🚫 Cancelled: 1
+   📋 Backlog:   2
+
+📋 Tasks by Agent:
+   backend (2 active, 2 done):
+      🔄 abc123 Implement user authentication...
+      📌 def456 Add rate limiting to API...
+      ✅ ghi789 Setup database migrations...
+      ✅ jkl012 Create user model...
+   reviewer (1 active, 1 done):
+      🔄 mno345 Review auth implementation...
+      ✅ pqr678 Review database schema...
+   (unassigned) (2 tasks):
+      ⏳ stu901 Write integration tests...
+```
+
 ## Stats Shown
 
 | Stat | Description |
@@ -76,6 +115,8 @@ Output:
 | **Pending** | Messages waiting in inbox |
 | **Message Types** | Pending breakdown: tasks, queries, informational, confirmations |
 | **Activity** | Recent round results (last 5) |
+| **Task States** | With `--tasks`: Pending, Assigned, Running, Completed, Failed, Cancelled, Backlog |
+| **Tasks by Agent** | With `--tasks`: Tasks grouped by assigned agent with state icons |
 
 ## Output Fields
 
@@ -118,14 +159,14 @@ For more detail:
 # Connect to Redis
 redis-cli -s ./redis.sock
 
-# List all keys
-KEYS tt:*
+# List all keys for your town
+KEYS tt:<town_name>:*
 
 # Check specific inbox
-LLEN tt:inbox:550e8400-e29b-41d4-a716-446655440000
+LLEN tt:<town_name>:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # View agent state
-GET tt:agent:550e8400-e29b-41d4-a716-446655440000
+GET tt:<town_name>:agent:550e8400-e29b-41d4-a716-446655440000
 ```
 
 ## See Also

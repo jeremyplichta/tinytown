@@ -17,53 +17,124 @@ use crate::agent::AgentId;
 use crate::error::Result;
 use crate::message::{Message, Priority};
 
-/// Key prefix for agent inboxes
-const INBOX_PREFIX: &str = "tt:inbox:";
-
-/// Key prefix for agent state
-const STATE_PREFIX: &str = "tt:agent:";
-
-/// Key prefix for tasks
-const TASK_PREFIX: &str = "tt:task:";
-
-/// Key prefix for agent activity logs
-const ACTIVITY_PREFIX: &str = "tt:activity:";
-
-/// Key prefix for urgent inbox
-const URGENT_PREFIX: &str = "tt:urgent:";
-
-/// Key prefix for stop flags
-const STOP_PREFIX: &str = "tt:stop:";
-
-/// Key for global task backlog
-const BACKLOG_KEY: &str = "tt:backlog";
-
 /// TTL for activity logs (1 hour)
 const ACTIVITY_TTL_SECS: u64 = 3600;
 
 /// Max activity entries per agent
 const ACTIVITY_MAX_ENTRIES: isize = 10;
 
-/// Pub/sub channel for broadcasts
-const BROADCAST_CHANNEL: &str = "tt:broadcast";
-
 /// Redis-based communication channel.
+///
+/// All Redis keys are namespaced by town name to ensure isolation when
+/// multiple towns share the same Redis instance.
+/// Key format: `tt:{town_name}:{type}:{id}`
 #[derive(Clone)]
 pub struct Channel {
     conn: ConnectionManager,
+    /// Town name used for key namespacing
+    town_name: String,
 }
 
 impl Channel {
-    /// Create a new channel from a Redis connection.
-    pub fn new(conn: ConnectionManager) -> Self {
-        Self { conn }
+    /// Create a new channel from a Redis connection with town namespacing.
+    ///
+    /// All Redis keys will be prefixed with `tt:{town_name}:` to ensure
+    /// isolation between different towns sharing the same Redis instance.
+    pub fn new(conn: ConnectionManager, town_name: impl Into<String>) -> Self {
+        Self {
+            conn,
+            town_name: town_name.into(),
+        }
+    }
+
+    /// Get the town name for this channel.
+    pub fn town_name(&self) -> &str {
+        &self.town_name
+    }
+
+    // ==================== Key Generation ====================
+    // All keys are namespaced by town name: tt:{town}:{type}:{id}
+
+    /// Generate inbox key for an agent.
+    fn inbox_key(&self, agent_id: AgentId) -> String {
+        format!("tt:{}:inbox:{}", self.town_name, agent_id)
+    }
+
+    /// Generate urgent inbox key for an agent.
+    fn urgent_key(&self, agent_id: AgentId) -> String {
+        format!("tt:{}:urgent:{}", self.town_name, agent_id)
+    }
+
+    /// Generate state key for an agent.
+    fn state_key(&self, agent_id: AgentId) -> String {
+        format!("tt:{}:agent:{}", self.town_name, agent_id)
+    }
+
+    /// Generate task key.
+    fn task_key(&self, task_id: crate::task::TaskId) -> String {
+        format!("tt:{}:task:{}", self.town_name, task_id)
+    }
+
+    /// Generate activity key for an agent.
+    fn activity_key(&self, agent_id: AgentId) -> String {
+        format!("tt:{}:activity:{}", self.town_name, agent_id)
+    }
+
+    /// Generate stop flag key for an agent.
+    fn stop_key(&self, agent_id: AgentId) -> String {
+        format!("tt:{}:stop:{}", self.town_name, agent_id)
+    }
+
+    /// Generate backlog key for this town.
+    fn backlog_key(&self) -> String {
+        format!("tt:{}:backlog", self.town_name)
+    }
+
+    /// Generate broadcast channel name for this town.
+    fn broadcast_channel(&self) -> String {
+        format!("tt:{}:broadcast", self.town_name)
+    }
+
+    /// Generate key pattern for scanning all keys in this town.
+    fn town_key_pattern(&self) -> String {
+        format!("tt:{}:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning agent keys in this town.
+    fn agent_key_pattern(&self) -> String {
+        format!("tt:{}:agent:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning inbox keys in this town.
+    fn inbox_key_pattern(&self) -> String {
+        format!("tt:{}:inbox:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning stop keys in this town.
+    fn stop_key_pattern(&self) -> String {
+        format!("tt:{}:stop:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning activity keys in this town.
+    fn activity_key_pattern(&self) -> String {
+        format!("tt:{}:activity:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning urgent inbox keys in this town.
+    fn urgent_key_pattern(&self) -> String {
+        format!("tt:{}:urgent:*", self.town_name)
+    }
+
+    /// Generate key pattern for scanning task keys in this town.
+    fn task_key_pattern(&self) -> String {
+        format!("tt:{}:task:*", self.town_name)
     }
 
     /// Send a message to an agent's inbox.
     #[instrument(skip(self, message), fields(to = %message.to, msg_type = ?message.msg_type))]
     pub async fn send(&self, message: &Message) -> Result<()> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, message.to);
+        let inbox_key = self.inbox_key(message.to);
         let serialized = serde_json::to_string(message)?;
 
         // Use priority queues: high priority goes to front
@@ -86,7 +157,7 @@ impl Channel {
     #[instrument(skip(self, message))]
     pub async fn send_urgent(&self, message: &Message) -> Result<()> {
         let mut conn = self.conn.clone();
-        let urgent_key = format!("{}{}", URGENT_PREFIX, message.to);
+        let urgent_key = self.urgent_key(message.to);
 
         let data = serde_json::to_string(message)?;
         let _: () = conn.lpush(&urgent_key, &data).await?;
@@ -101,7 +172,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn receive_urgent(&self, agent_id: AgentId) -> Result<Vec<Message>> {
         let mut conn = self.conn.clone();
-        let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
+        let urgent_key = self.urgent_key(agent_id);
 
         let mut messages = Vec::new();
         loop {
@@ -128,7 +199,7 @@ impl Channel {
     /// Check urgent inbox length.
     pub async fn urgent_len(&self, agent_id: AgentId) -> Result<usize> {
         let mut conn = self.conn.clone();
-        let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
+        let urgent_key = self.urgent_key(agent_id);
         let len: usize = conn.llen(&urgent_key).await?;
         Ok(len)
     }
@@ -139,7 +210,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn request_stop(&self, agent_id: AgentId) -> Result<()> {
         let mut conn = self.conn.clone();
-        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+        let stop_key = self.stop_key(agent_id);
 
         // Set flag with 1-hour TTL (cleanup if agent already dead)
         let _: () = conn.set_ex(&stop_key, "1", 3600).await?;
@@ -152,7 +223,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn should_stop(&self, agent_id: AgentId) -> Result<bool> {
         let mut conn = self.conn.clone();
-        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+        let stop_key = self.stop_key(agent_id);
 
         let exists: bool = conn.exists(&stop_key).await?;
         Ok(exists)
@@ -161,7 +232,7 @@ impl Channel {
     /// Clear the stop flag (called when agent stops).
     pub async fn clear_stop(&self, agent_id: AgentId) -> Result<()> {
         let mut conn = self.conn.clone();
-        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+        let stop_key = self.stop_key(agent_id);
 
         let _: () = conn.del(&stop_key).await?;
         Ok(())
@@ -171,7 +242,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn receive(&self, agent_id: AgentId, timeout: Duration) -> Result<Option<Message>> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
 
         let result: Option<String> = conn.blpop(&inbox_key, timeout.as_secs_f64()).await?;
 
@@ -188,7 +259,7 @@ impl Channel {
     /// Receive a message without blocking.
     pub async fn try_receive(&self, agent_id: AgentId) -> Result<Option<Message>> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
 
         let result: Option<String> = conn.lpop(&inbox_key, None).await?;
 
@@ -204,7 +275,7 @@ impl Channel {
     /// Get the number of messages in an agent's inbox.
     pub async fn inbox_len(&self, agent_id: AgentId) -> Result<usize> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
         let len: usize = conn.llen(&inbox_key).await?;
         Ok(len)
     }
@@ -212,7 +283,7 @@ impl Channel {
     /// Peek at inbox messages without removing them.
     pub async fn peek_inbox(&self, agent_id: AgentId, count: isize) -> Result<Vec<Message>> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
         let items: Vec<String> = conn.lrange(&inbox_key, 0, count - 1).await?;
 
         let mut messages = Vec::new();
@@ -228,7 +299,8 @@ impl Channel {
     pub async fn broadcast(&self, message: &Message) -> Result<()> {
         let mut conn = self.conn.clone();
         let serialized = serde_json::to_string(message)?;
-        let _: () = conn.publish(BROADCAST_CHANNEL, &serialized).await?;
+        let broadcast_channel = self.broadcast_channel();
+        let _: () = conn.publish(broadcast_channel, &serialized).await?;
         Ok(())
     }
 
@@ -238,7 +310,7 @@ impl Channel {
     /// to individual fields (like state, heartbeat) without rewriting the entire object.
     pub async fn set_agent_state(&self, agent: &crate::agent::Agent) -> Result<()> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent.id);
+        let key = self.state_key(agent.id);
 
         // Convert agent fields to hash entries
         let mut fields: Vec<(String, String)> = vec![
@@ -272,9 +344,12 @@ impl Channel {
             ),
         ];
 
-        // Handle optional current_task
+        // Handle optional current_task - use HDEL to clear stale values when None
         if let Some(ref task_id) = agent.current_task {
             fields.push(("current_task".to_string(), task_id.to_string()));
+        } else {
+            // Delete the field if it's None to avoid stale values persisting
+            let _: () = conn.hdel(&key, "current_task").await?;
         }
 
         // Use HSET with multiple field-value pairs
@@ -287,7 +362,7 @@ impl Channel {
     /// Uses HGETALL to retrieve all agent fields from the Hash.
     pub async fn get_agent_state(&self, agent_id: AgentId) -> Result<Option<crate::agent::Agent>> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent_id);
+        let key = self.state_key(agent_id);
 
         let fields: std::collections::HashMap<String, String> = conn.hgetall(&key).await?;
 
@@ -373,7 +448,7 @@ impl Channel {
     /// List all agents from Redis.
     pub async fn list_agents(&self) -> Result<Vec<crate::agent::Agent>> {
         let mut conn = self.conn.clone();
-        let pattern = format!("{}*", STATE_PREFIX);
+        let pattern = self.agent_key_pattern();
         let keys: Vec<String> = redis::cmd("KEYS")
             .arg(&pattern)
             .query_async(&mut conn)
@@ -400,13 +475,13 @@ impl Channel {
     /// Delete an agent from Redis.
     pub async fn delete_agent(&self, agent_id: AgentId) -> Result<()> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent_id);
+        let key = self.state_key(agent_id);
         let _: () = conn.del(&key).await?;
         // Also clean up related keys
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
-        let urgent_key = format!("{}{}", URGENT_PREFIX, agent_id);
-        let activity_key = format!("{}{}", ACTIVITY_PREFIX, agent_id);
-        let stop_key = format!("{}{}", STOP_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
+        let urgent_key = self.urgent_key(agent_id);
+        let activity_key = self.activity_key(agent_id);
+        let stop_key = self.stop_key(agent_id);
         let _: () = conn.del(&inbox_key).await?;
         let _: () = conn.del(&urgent_key).await?;
         let _: () = conn.del(&activity_key).await?;
@@ -421,7 +496,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn increment_agent_rounds(&self, agent_id: AgentId) -> Result<u64> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent_id);
+        let key = self.state_key(agent_id);
         let new_value: i64 = conn.hincr(&key, "rounds_completed", 1).await?;
         debug!("Agent {} rounds_completed incremented to {}", agent_id, new_value);
         Ok(new_value as u64)
@@ -433,7 +508,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn increment_agent_tasks_completed(&self, agent_id: AgentId) -> Result<u64> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent_id);
+        let key = self.state_key(agent_id);
         let new_value: i64 = conn.hincr(&key, "tasks_completed", 1).await?;
         debug!("Agent {} tasks_completed incremented to {}", agent_id, new_value);
         Ok(new_value as u64)
@@ -445,7 +520,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn update_agent_heartbeat(&self, agent_id: AgentId) -> Result<()> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", STATE_PREFIX, agent_id);
+        let key = self.state_key(agent_id);
         let now = chrono::Utc::now().to_rfc3339();
         let _: () = conn.hset(&key, "last_heartbeat", &now).await?;
         Ok(())
@@ -457,7 +532,7 @@ impl Channel {
     /// to individual fields without rewriting the entire object.
     pub async fn set_task(&self, task: &crate::task::Task) -> Result<()> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", TASK_PREFIX, task.id);
+        let key = self.task_key(task.id);
 
         // Convert task fields to hash entries
         let mut fields: Vec<(String, String)> = vec![
@@ -481,21 +556,32 @@ impl Channel {
             ),
         ];
 
-        // Handle optional fields
+        // Handle optional fields - use HDEL to clear stale values when None
+        // This prevents old values from persisting when fields transition from Some to None
         if let Some(ref agent_id) = task.assigned_to {
             fields.push(("assigned_to".to_string(), agent_id.to_string()));
+        } else {
+            let _: () = conn.hdel(&key, "assigned_to").await?;
         }
         if let Some(ref started_at) = task.started_at {
             fields.push(("started_at".to_string(), started_at.to_rfc3339()));
+        } else {
+            let _: () = conn.hdel(&key, "started_at").await?;
         }
         if let Some(ref completed_at) = task.completed_at {
             fields.push(("completed_at".to_string(), completed_at.to_rfc3339()));
+        } else {
+            let _: () = conn.hdel(&key, "completed_at").await?;
         }
         if let Some(ref result) = task.result {
             fields.push(("result".to_string(), result.clone()));
+        } else {
+            let _: () = conn.hdel(&key, "result").await?;
         }
         if let Some(ref parent_id) = task.parent_id {
             fields.push(("parent_id".to_string(), parent_id.to_string()));
+        } else {
+            let _: () = conn.hdel(&key, "parent_id").await?;
         }
 
         // Use HSET with multiple field-value pairs
@@ -511,7 +597,7 @@ impl Channel {
         task_id: crate::task::TaskId,
     ) -> Result<Option<crate::task::Task>> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", TASK_PREFIX, task_id);
+        let key = self.task_key(task_id);
 
         let fields: std::collections::HashMap<String, String> = conn.hgetall(&key).await?;
 
@@ -526,11 +612,11 @@ impl Channel {
 
     /// Delete a task from Redis.
     ///
-    /// Removes the task hash at `tt:task:{task_id}`.
+    /// Removes the task hash at `tt:{town}:task:{task_id}`.
     /// Returns true if the task existed and was deleted, false if it didn't exist.
     pub async fn delete_task(&self, task_id: crate::task::TaskId) -> Result<bool> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", TASK_PREFIX, task_id);
+        let key = self.task_key(task_id);
         let deleted: i64 = conn.del(&key).await?;
         if deleted > 0 {
             debug!("Deleted task {}", task_id);
@@ -619,10 +705,10 @@ impl Channel {
 
     /// List all tasks in Redis.
     ///
-    /// Scans all `tt:task:*` keys and returns the tasks.
+    /// Scans all `tt:{town}:task:*` keys and returns the tasks.
     pub async fn list_tasks(&self) -> Result<Vec<crate::task::Task>> {
         let mut conn = self.conn.clone();
-        let pattern = format!("{}*", TASK_PREFIX);
+        let pattern = self.task_key_pattern();
         let mut tasks = Vec::new();
 
         // Use KEYS to find all task keys (consider SCAN for larger datasets)
@@ -650,7 +736,7 @@ impl Channel {
     #[instrument(skip(self, activity))]
     pub async fn log_agent_activity(&self, agent_id: AgentId, activity: &str) -> Result<()> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", ACTIVITY_PREFIX, agent_id);
+        let key = self.activity_key(agent_id);
 
         // Prepend to list (newest first)
         let _: () = conn.lpush(&key, activity).await?;
@@ -671,7 +757,7 @@ impl Channel {
     #[instrument(skip(self))]
     pub async fn get_agent_activity(&self, agent_id: AgentId) -> Result<Option<String>> {
         let mut conn = self.conn.clone();
-        let key = format!("{}{}", ACTIVITY_PREFIX, agent_id);
+        let key = self.activity_key(agent_id);
 
         let entries: Vec<String> = conn.lrange(&key, 0, 4).await?; // Get last 5
 
@@ -684,10 +770,11 @@ impl Channel {
 
     // ==================== Backlog Methods ====================
 
-    /// Add a task ID to the global backlog queue.
+    /// Add a task ID to the town's backlog queue.
     pub async fn backlog_push(&self, task_id: crate::task::TaskId) -> Result<()> {
         let mut conn = self.conn.clone();
-        let _: () = conn.rpush(BACKLOG_KEY, task_id.to_string()).await?;
+        let backlog_key = self.backlog_key();
+        let _: () = conn.rpush(&backlog_key, task_id.to_string()).await?;
         debug!("Added task {} to backlog", task_id);
         Ok(())
     }
@@ -695,7 +782,8 @@ impl Channel {
     /// List all task IDs in the backlog.
     pub async fn backlog_list(&self) -> Result<Vec<crate::task::TaskId>> {
         let mut conn = self.conn.clone();
-        let items: Vec<String> = conn.lrange(BACKLOG_KEY, 0, -1).await?;
+        let backlog_key = self.backlog_key();
+        let items: Vec<String> = conn.lrange(&backlog_key, 0, -1).await?;
 
         let mut task_ids = Vec::new();
         for item in items {
@@ -709,14 +797,16 @@ impl Channel {
     /// Get the number of tasks in the backlog.
     pub async fn backlog_len(&self) -> Result<usize> {
         let mut conn = self.conn.clone();
-        let len: usize = conn.llen(BACKLOG_KEY).await?;
+        let backlog_key = self.backlog_key();
+        let len: usize = conn.llen(&backlog_key).await?;
         Ok(len)
     }
 
     /// Pop a task from the front of the backlog (FIFO).
     pub async fn backlog_pop(&self) -> Result<Option<crate::task::TaskId>> {
         let mut conn = self.conn.clone();
-        let result: Option<String> = conn.lpop(BACKLOG_KEY, None).await?;
+        let backlog_key = self.backlog_key();
+        let result: Option<String> = conn.lpop(&backlog_key, None).await?;
 
         match result {
             Some(id) => {
@@ -733,7 +823,8 @@ impl Channel {
     /// Remove a specific task from the backlog.
     pub async fn backlog_remove(&self, task_id: crate::task::TaskId) -> Result<bool> {
         let mut conn = self.conn.clone();
-        let removed: i64 = conn.lrem(BACKLOG_KEY, 1, task_id.to_string()).await?;
+        let backlog_key = self.backlog_key();
+        let removed: i64 = conn.lrem(&backlog_key, 1, task_id.to_string()).await?;
         if removed > 0 {
             debug!("Removed task {} from backlog", task_id);
         }
@@ -747,7 +838,7 @@ impl Channel {
     /// Returns all messages that were in the inbox.
     pub async fn drain_inbox(&self, agent_id: AgentId) -> Result<Vec<Message>> {
         let mut conn = self.conn.clone();
-        let inbox_key = format!("{}{}", INBOX_PREFIX, agent_id);
+        let inbox_key = self.inbox_key(agent_id);
 
         let mut messages = Vec::new();
         loop {
@@ -811,15 +902,17 @@ impl Channel {
 
     /// Delete all town state from Redis.
     ///
-    /// This removes all agents, tasks, inboxes, activity logs, stop flags, and the backlog.
+    /// This removes all agents, tasks, inboxes, activity logs, stop flags, and the backlog
+    /// for this specific town only. Other towns sharing the same Redis instance are not affected.
     /// Returns the number of keys deleted.
     ///
     /// Uses SCAN instead of KEYS for production safety (non-blocking).
     pub async fn reset_all(&self) -> Result<usize> {
         let mut conn = self.conn.clone();
 
-        // Find all tt:* keys using SCAN (production-safe)
-        let keys = self.scan_keys("tt:*").await?;
+        // Find all tt:{town_name}:* keys using SCAN (production-safe)
+        let pattern = self.town_key_pattern();
+        let keys = self.scan_keys(&pattern).await?;
 
         if keys.is_empty() {
             return Ok(0);
@@ -833,13 +926,14 @@ impl Channel {
             .query_async(&mut conn)
             .await?;
 
-        debug!("Reset: deleted {} keys", count);
+        debug!("Reset: deleted {} keys for town '{}'", count, self.town_name);
         Ok(count)
     }
 
     /// Delete only agent-related state from Redis.
     ///
     /// This removes agents and their inboxes, but preserves tasks and backlog.
+    /// Only affects this town's agents; other towns are not affected.
     /// Returns the number of keys deleted.
     ///
     /// Uses SCAN instead of KEYS for production safety (non-blocking).
@@ -847,11 +941,13 @@ impl Channel {
         let mut conn = self.conn.clone();
 
         // Find agent and inbox keys using SCAN (production-safe)
+        // All patterns are town-namespaced
         let mut keys = Vec::new();
-        keys.extend(self.scan_keys("tt:agent:*").await?);
-        keys.extend(self.scan_keys("tt:inbox:*").await?);
-        keys.extend(self.scan_keys("tt:stop:*").await?);
-        keys.extend(self.scan_keys("tt:activity:*").await?);
+        keys.extend(self.scan_keys(&self.agent_key_pattern()).await?);
+        keys.extend(self.scan_keys(&self.inbox_key_pattern()).await?);
+        keys.extend(self.scan_keys(&self.urgent_key_pattern()).await?);
+        keys.extend(self.scan_keys(&self.stop_key_pattern()).await?);
+        keys.extend(self.scan_keys(&self.activity_key_pattern()).await?);
 
         if keys.is_empty() {
             return Ok(0);
@@ -865,7 +961,7 @@ impl Channel {
             .query_async(&mut conn)
             .await?;
 
-        debug!("Reset agents only: deleted {} keys", count);
+        debug!("Reset agents only: deleted {} keys for town '{}'", count, self.town_name);
         Ok(count)
     }
 }

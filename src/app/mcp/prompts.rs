@@ -71,6 +71,7 @@ pub fn conductor_startup_context_prompt(state: Arc<McpState>) -> Prompt {
                 context.push_str("- `agent.spawn` - Spawn new agent\n");
                 context.push_str("- `agent.kill` - Stop an agent\n");
                 context.push_str("- `task.assign` - Assign task to agent\n");
+                context.push_str("- `task.complete` - Mark task as completed\n");
                 context.push_str("- `message.send` - Send message to agent\n");
                 context.push_str("- `backlog.list/add/claim` - Manage backlog\n");
                 context.push_str("- `recovery.*` - Recovery operations\n");

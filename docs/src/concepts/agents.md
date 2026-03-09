@@ -129,15 +129,18 @@ handle.wait().await?;
 
 ## Agent Storage in Redis
 
-Agents are persisted in Redis:
+Agents are persisted in Redis using town-isolated keys:
 
 ```
-tt:agent:<uuid>  →  JSON serialized Agent struct
-tt:inbox:<uuid>  →  List of pending messages
+tt:<town_name>:agent:<uuid>  →  JSON serialized Agent struct
+tt:<town_name>:inbox:<uuid>  →  List of pending messages
 ```
+
+This town-isolated format allows multiple Tinytown projects to share the same Redis instance without key conflicts. See [tt migrate](../cli/migrate.md) for upgrading from older key formats.
 
 This means:
 - Agent state survives Redis restarts (with persistence)
 - Multiple processes can coordinate via the same town
+- Multiple towns can share the same Redis instance
 - You can inspect state with `redis-cli`
 

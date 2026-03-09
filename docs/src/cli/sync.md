@@ -86,13 +86,13 @@ Output:
 
 1. Reads all tasks from `tasks.toml`
 2. Creates corresponding Task objects
-3. Stores each in Redis at `tt:task:<id>`
+3. Stores each in Redis at `tt:<town>:task:<id>`
 4. Tags include `plan:<id>` for tracking
 
 ### Pull Behavior
 
 1. (Currently) Initializes empty tasks.toml if missing
-2. (Future) Scans Redis for `tt:task:*` keys
+2. (Future) Scans Redis for `tt:<town>:task:*` keys
 3. Converts to TaskEntry format
 4. Writes to tasks.toml
 

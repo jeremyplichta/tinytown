@@ -65,6 +65,10 @@ pub enum Error {
     /// Timeout waiting for operation
     #[error("Operation timed out: {0}")]
     Timeout(String),
+
+    /// Migration error
+    #[error("Migration error: {0}")]
+    Migration(String),
 }
 
 /// Convenience Result type for tinytown.

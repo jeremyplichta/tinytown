@@ -155,14 +155,16 @@ redis-cli INFO memory
 
 ## Key Patterns
 
-Tinytown uses these key patterns:
+Tinytown uses town-isolated key patterns:
 
 | Pattern | Type | Purpose |
 |---------|------|---------|
-| `tt:inbox:<uuid>` | List | Agent message queues |
-| `tt:agent:<uuid>` | String | Agent state (JSON) |
-| `tt:task:<uuid>` | String | Task state (JSON) |
+| `tt:<town>:inbox:<uuid>` | List | Agent message queues |
+| `tt:<town>:agent:<uuid>` | String | Agent state (JSON) |
+| `tt:<town>:task:<uuid>` | String | Task state (JSON) |
 | `tt:broadcast` | Pub/Sub | Broadcast channel |
+
+This town-isolated format allows multiple Tinytown projects to share the same Redis instance. See [tt migrate](../cli/migrate.md) for upgrading from older key formats.
 
 ## Debugging
 
@@ -179,14 +181,14 @@ redis-cli -h 127.0.0.1 -p 6379
 ### Useful Commands
 
 ```bash
-# List all tinytown keys
-KEYS tt:*
+# List all tinytown keys for a town
+KEYS tt:<town_name>:*
 
 # Check inbox length
-LLEN tt:inbox:550e8400-...
+LLEN tt:<town_name>:inbox:550e8400-...
 
 # View agent state
-GET tt:agent:550e8400-...
+GET tt:<town_name>:agent:550e8400-...
 
 # Monitor all operations
 MONITOR

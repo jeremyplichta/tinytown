@@ -18,23 +18,50 @@
 
 ```rust
 pub enum MessageType {
+    // Semantic message types (for inter-agent communication)
+    Task { description: String },           // Actionable work request
+    Query { question: String },             // Question expecting response
+    Informational { summary: String },      // FYI/context update
+    Confirmation { ack_type: ConfirmationType }, // Receipt/acknowledgment
+
     // Task management
     TaskAssign { task_id: String },
     TaskDone { task_id: String, result: String },
     TaskFailed { task_id: String, error: String },
-    
+
     // Status
     StatusRequest,
     StatusResponse { state: String, current_task: Option<String> },
-    
+
     // Lifecycle
     Ping,
     Pong,
     Shutdown,
-    
+
     // Extensibility
     Custom { kind: String, payload: String },
 }
+
+pub enum ConfirmationType {
+    Received,              // Message was received
+    Acknowledged,          // Message was acknowledged
+    Thanks,                // Message expressing thanks
+    Approved,              // Approval confirmation
+    Rejected { reason: String }, // Rejection with reason
+}
+```
+
+### Semantic Message Classification
+
+Messages are classified as either **actionable** or **informational**:
+
+| Actionable (require work) | Informational (context only) |
+|---------------------------|------------------------------|
+| `Task`, `Query`, `TaskAssign` | `Informational`, `Confirmation` |
+| `StatusRequest`, `Ping` | `TaskDone`, `TaskFailed` |
+| `Shutdown`, `Custom` | `StatusResponse`, `Pong` |
+
+Use `msg.is_actionable()` and `msg.is_informational_or_confirmation()` helpers to classify.
 ```
 
 ## Priority Levels

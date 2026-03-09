@@ -147,13 +147,20 @@ enum Commands {
         all: bool,
     },
 
-    /// Show pending tasks/messages for all agents
-    Tasks,
+    /// Manage individual tasks
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
 
-    /// Check an agent's inbox
+    /// Check agent inbox(es)
     Inbox {
-        /// Agent name
-        agent: String,
+        /// Agent name (optional with --all)
+        agent: Option<String>,
+
+        /// Show pending messages for all agents
+        #[arg(long, short)]
+        all: bool,
     },
 
     /// Send a message to an agent
@@ -259,6 +266,17 @@ enum Commands {
         #[command(subcommand)]
         action: AuthAction,
     },
+
+    /// Migrate old Redis keys to town-isolated format
+    Migrate {
+        /// Preview migration without making changes
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Skip confirmation prompt
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -301,6 +319,32 @@ enum BacklogAction {
     Remove {
         /// Task ID to remove
         task_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TaskAction {
+    /// Mark a task as completed
+    Complete {
+        /// Task ID to mark as completed
+        task_id: String,
+
+        /// Optional result/summary message
+        #[arg(long)]
+        result: Option<String>,
+    },
+
+    /// Show details of a specific task
+    Show {
+        /// Task ID to show
+        task_id: String,
+    },
+
+    /// List all tasks
+    List {
+        /// Filter by state (pending, assigned, running, completed, failed, cancelled)
+        #[arg(long)]
+        state: Option<String>,
     },
 }
 
@@ -465,6 +509,230 @@ fn truncate_summary(text: &str, max_chars: usize) -> String {
             .collect();
         format!("{}...", truncated)
     }
+}
+
+/// Clean up a raw log line for display in `tt status --deep`.
+///
+/// Extracts meaningful content from tracing-formatted logs like:
+/// `[2m2026-03-09T20:03:14.667655Z[0m [32m INFO[0m [2mtt[0m[2m:[0m    ✅ Round 1 complete`
+///
+/// Returns None if the line should be skipped (e.g., internal waiting loops).
+fn clean_log_line(line: &str) -> Option<String> {
+    // Strip ANSI escape codes
+    let stripped = strip_ansi_codes(line);
+
+    // Skip empty lines
+    if stripped.trim().is_empty() {
+        return None;
+    }
+
+    // Skip internal waiting loop messages (noise)
+    if stripped.contains("Inbox empty, waiting") {
+        return None;
+    }
+
+    // Skip Redis version messages
+    if stripped.contains("Redis version") && stripped.contains("detected") {
+        return None;
+    }
+
+    // Skip repetitive round marker lines (just noise in logs)
+    // Pattern: "📍 Round X/Y" without any other content
+    let trimmed = stripped.trim();
+    if trimmed.starts_with("📍 Round ") && !trimmed.contains("complete") {
+        return None;
+    }
+
+    // Skip standalone "tt:" lines (empty log content)
+    if trimmed == "tt:" || trimmed.ends_with(" tt:") {
+        return None;
+    }
+
+    // Skip "Running auggie..." lines (repetitive, expected behavior)
+    if trimmed.contains("Running auggie") {
+        return None;
+    }
+
+    // Skip "Rounds completed:" status lines (redundant with round complete messages)
+    if trimmed.contains("📊 Rounds completed:") {
+        return None;
+    }
+
+    // Skip batching status lines (low-value noise)
+    if trimmed.contains("📬 batched:") {
+        return None;
+    }
+
+    // Skip repetitive backlog prompting messages (consolidate with round info)
+    if trimmed.contains("prompting backlog review") || trimmed.contains("prompting claim review") {
+        return None;
+    }
+
+    // Try to extract the actual message content from tracing format
+    // Format: "2026-03-09T20:03:14.667655Z  INFO tt:    ✅ Round 1 complete"
+    // Or: "📍 Round 2/15"
+    let content = extract_log_content(&stripped);
+
+    if content.is_empty() {
+        return None;
+    }
+
+    // Skip if extracted content is just "tt:" (sometimes logs have empty content)
+    if content == "tt:" {
+        return None;
+    }
+
+    Some(content)
+}
+
+/// Strip ANSI escape codes from a string.
+fn strip_ansi_codes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // Skip escape sequence: ESC [ ... m
+            if chars.peek() == Some(&'[') {
+                chars.next(); // consume '['
+                // Skip until we hit 'm' (end of color code)
+                while let Some(ch) = chars.next() {
+                    if ch == 'm' {
+                        break;
+                    }
+                }
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+/// Clean up old round log files for an agent.
+///
+/// Removes all files matching pattern: `{agent_name}_round_{N}.log`
+/// Returns the number of files deleted.
+fn clean_agent_round_logs(log_dir: &std::path::Path, agent_name: &str) -> usize {
+    let prefix = format!("{}_round_", agent_name);
+    let mut deleted = 0;
+
+    if let Ok(entries) = std::fs::read_dir(log_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                if filename.starts_with(&prefix) && filename.ends_with(".log") {
+                    if std::fs::remove_file(&path).is_ok() {
+                        deleted += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    deleted
+}
+
+/// Find the latest round log file for an agent.
+///
+/// Searches for files matching pattern: `{agent_name}_round_{N}.log`
+/// Returns the path and round number of the file with the highest round number.
+fn find_latest_round_log(log_dir: &std::path::Path, agent_name: &str) -> Option<(u32, std::path::PathBuf)> {
+    let prefix = format!("{}_round_", agent_name);
+    let mut latest: Option<(u32, std::path::PathBuf)> = None;
+
+    if let Ok(entries) = std::fs::read_dir(log_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if let Some(filename) = path.file_name().and_then(|n| n.to_str()) {
+                if filename.starts_with(&prefix) && filename.ends_with(".log") {
+                    // Extract round number from filename
+                    let num_part = &filename[prefix.len()..filename.len() - 4]; // Remove prefix and ".log"
+                    if let Ok(round_num) = num_part.parse::<u32>() {
+                        match &latest {
+                            Some((current_max, _)) if round_num > *current_max => {
+                                latest = Some((round_num, path));
+                            }
+                            None => {
+                                latest = Some((round_num, path));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    latest
+}
+
+/// Extract the meaningful content from a tracing log line.
+fn extract_log_content(line: &str) -> String {
+    let trimmed = line.trim();
+
+    // If it starts with an emoji or marker, it's already clean content
+    if trimmed.starts_with('📍')
+        || trimmed.starts_with('✅')
+        || trimmed.starts_with('❌')
+        || trimmed.starts_with('🔄')
+        || trimmed.starts_with('📬')
+        || trimmed.starts_with('🤖')
+        || trimmed.starts_with('📊')
+        || trimmed.starts_with('🛑')
+        || trimmed.starts_with('📋')
+    {
+        return trimmed.to_string();
+    }
+
+    // Try to find the message after the log level indicator
+    // Patterns: "INFO tt:" or "WARN tt:" or just the timestamp pattern
+    if let Some(pos) = trimmed.find(" INFO ") {
+        let after_info = &trimmed[pos + 6..];
+        // Skip module path like "tt:" or "tinytown::town:"
+        if let Some(colon_pos) = after_info.find(':') {
+            let content = after_info[colon_pos + 1..].trim();
+            if !content.is_empty() {
+                return content.to_string();
+            }
+        }
+        return after_info.trim().to_string();
+    }
+
+    if let Some(pos) = trimmed.find(" WARN ") {
+        let after_warn = &trimmed[pos + 6..];
+        if let Some(colon_pos) = after_warn.find(':') {
+            let content = after_warn[colon_pos + 1..].trim();
+            if !content.is_empty() {
+                return format!("⚠️ {}", content);
+            }
+        }
+        return format!("⚠️ {}", after_warn.trim());
+    }
+
+    if let Some(pos) = trimmed.find(" ERROR ") {
+        let after_error = &trimmed[pos + 7..];
+        if let Some(colon_pos) = after_error.find(':') {
+            let content = after_error[colon_pos + 1..].trim();
+            if !content.is_empty() {
+                return format!("❌ {}", content);
+            }
+        }
+        return format!("❌ {}", after_error.trim());
+    }
+
+    // If it looks like a timestamp at the start, try to skip it
+    // Pattern: "2026-03-09T20:03:14.667655Z ..."
+    if trimmed.len() > 27 && trimmed.chars().nth(4) == Some('-') && trimmed.chars().nth(10) == Some('T') {
+        let rest = trimmed[27..].trim();
+        if !rest.is_empty() {
+            return rest.to_string();
+        }
+    }
+
+    // Return as-is if we couldn't parse it
+    trimmed.to_string()
 }
 
 fn backlog_role_hint(agent_name: &str) -> &'static str {
@@ -1000,21 +1268,13 @@ async fn main() -> Result<()> {
                     format!("{}s", uptime.num_seconds())
                 };
 
-                // Get current task description if agent is working on one
-                let current_task_desc = if let Some(task_id) = agent.current_task {
-                    if let Ok(Some(task)) = town.channel().get_task(task_id).await {
-                        // Truncate description for display
-                        let desc = &task.description;
-                        if desc.len() > 60 {
-                            Some(format!("{}...", &desc[..57]))
-                        } else {
-                            Some(desc.clone())
-                        }
-                    } else {
-                        None
-                    }
+                // Get running tasks assigned to this agent (more reliable than current_task field)
+                let running_tasks: Vec<_> = if let Ok(all_tasks) = town.channel().list_tasks().await {
+                    all_tasks.into_iter()
+                        .filter(|t| t.assigned_to == Some(agent.id) && t.state == tinytown::TaskState::Running)
+                        .collect()
                 } else {
-                    None
+                    Vec::new()
                 };
 
                 if deep {
@@ -1022,17 +1282,51 @@ async fn main() -> Result<()> {
                         "   {} ({:?}) - {} pending, {} rounds, uptime {}",
                         agent.name, agent.state, inbox_len, agent.rounds_completed, uptime_str
                     );
+                    // Build a more readable pending breakdown with labels
+                    let task_count = breakdown.tasks + breakdown.other_actionable;
+                    let mut pending_parts = Vec::new();
+                    if task_count > 0 {
+                        pending_parts.push(format!("{} task{}", task_count, if task_count == 1 { "" } else { "s" }));
+                    }
+                    if breakdown.queries > 0 {
+                        pending_parts.push(format!("{} quer{}", breakdown.queries, if breakdown.queries == 1 { "y" } else { "ies" }));
+                    }
+                    if breakdown.informational > 0 {
+                        pending_parts.push(format!("{} info", breakdown.informational));
+                    }
+                    if breakdown.confirmations > 0 {
+                        pending_parts.push(format!("{} ack{}", breakdown.confirmations, if breakdown.confirmations == 1 { "" } else { "s" }));
+                    }
+                    if pending_parts.is_empty() {
+                        pending_parts.push("no pending messages".to_string());
+                    }
                     info!(
-                        "      └─ 🔴 {} task  🟡 {} query  🟢 {} info  ⚪ {} confirmations{}",
-                        breakdown.tasks + breakdown.other_actionable,
-                        breakdown.queries,
-                        breakdown.informational,
-                        breakdown.confirmations,
+                        "      └─ 📬 {}{}",
+                        pending_parts.join(", "),
                         sampled_note
                     );
-                    // Show current in-flight task if working
-                    if let Some(ref task_desc) = current_task_desc {
-                        info!("      └─ 🔄 Working on: {}", task_desc);
+                    // Show running tasks assigned to this agent
+                    if !running_tasks.is_empty() {
+                        for task in &running_tasks {
+                            let desc = if task.description.len() > 55 {
+                                format!("{}...", &task.description.chars().take(52).collect::<String>())
+                            } else {
+                                task.description.clone()
+                            };
+                            let started = task.started_at
+                                .map(|t| {
+                                    let elapsed = chrono::Utc::now() - t;
+                                    if elapsed.num_hours() > 0 {
+                                        format!("{}h {}m ago", elapsed.num_hours(), elapsed.num_minutes() % 60)
+                                    } else if elapsed.num_minutes() > 0 {
+                                        format!("{}m ago", elapsed.num_minutes())
+                                    } else {
+                                        "just now".to_string()
+                                    }
+                                })
+                                .unwrap_or_default();
+                            info!("      └─ 🔄 {}: {} (started {})", task.id.to_string().chars().take(8).collect::<String>(), desc, started);
+                        }
                     }
                     // Get recent activity from Redis
                     if let Ok(Some(activity)) = town.channel().get_agent_activity(agent.id).await {
@@ -1042,29 +1336,25 @@ async fn main() -> Result<()> {
                     }
                 } else {
                     // Show current task indicator for working agents in non-deep mode
-                    if let Some(ref task_desc) = current_task_desc {
-                        info!(
-                            "   {} ({:?}) - {} pending (🔴 {} 🟡 {} 🟢 {} ⚪ {})",
-                            agent.name,
-                            agent.state,
-                            inbox_len,
-                            breakdown.tasks + breakdown.other_actionable,
-                            breakdown.queries,
-                            breakdown.informational,
-                            breakdown.confirmations
-                        );
-                        info!("      └─ 🔄 {}", task_desc);
-                    } else {
-                        info!(
-                            "   {} ({:?}) - {} pending (🔴 {} 🟡 {} 🟢 {} ⚪ {})",
-                            agent.name,
-                            agent.state,
-                            inbox_len,
-                            breakdown.tasks + breakdown.other_actionable,
-                            breakdown.queries,
-                            breakdown.informational,
-                            breakdown.confirmations
-                        );
+                    info!(
+                        "   {} ({:?}) - {} pending (T:{} Q:{} I:{} C:{})",
+                        agent.name,
+                        agent.state,
+                        inbox_len,
+                        breakdown.tasks + breakdown.other_actionable,
+                        breakdown.queries,
+                        breakdown.informational,
+                        breakdown.confirmations
+                    );
+                    // Show running tasks for this agent
+                    if !running_tasks.is_empty() {
+                        let task = &running_tasks[0];
+                        let desc = if task.description.len() > 50 {
+                            format!("{}...", &task.description.chars().take(47).collect::<String>())
+                        } else {
+                            task.description.clone()
+                        };
+                        info!("      └─ Working: {}", desc);
                     }
                 }
             }
@@ -1095,8 +1385,9 @@ async fn main() -> Result<()> {
             let total = tasks.len();
             let in_flight = assigned + running;
             let done = completed + failed + cancelled;
-            // Pending includes backlog items plus Pending-state tasks not in backlog
-            let pending_total = pending + backlog_count;
+            // Note: backlog items are already counted in `pending` (they have TaskState::Pending)
+            // so we don't add backlog_count again to avoid double-counting
+            let pending_total = pending;
 
             info!("📋 Tasks: {} total ({} pending, {} in-flight, {} done)",
                 total, pending_total, in_flight, done);
@@ -1153,7 +1444,7 @@ async fn main() -> Result<()> {
                             tinytown::TaskState::Cancelled => "🚫",
                         };
                         let desc = task.description.chars().take(50).collect::<String>();
-                        let truncated = if task.description.len() > 50 { "..." } else { "" };
+                        let truncated = if task.description.chars().count() > 50 { "..." } else { "" };
                         info!("      {} {} {}{}", state_icon, task.id, desc, truncated);
                     }
                     if agent_tasks.len() > 5 {
@@ -1165,7 +1456,7 @@ async fn main() -> Result<()> {
                     info!("   (unassigned) ({} tasks):", unassigned_tasks.len());
                     for task in unassigned_tasks.iter().take(5) {
                         let desc = task.description.chars().take(50).collect::<String>();
-                        let truncated = if task.description.len() > 50 { "..." } else { "" };
+                        let truncated = if task.description.chars().count() > 50 { "..." } else { "" };
                         info!("      ⏳ {} {}{}", task.id, desc, truncated);
                     }
                     if unassigned_tasks.len() > 5 {
@@ -1180,7 +1471,7 @@ async fn main() -> Result<()> {
 
                 // Show recent logs from each agent
                 info!("");
-                info!("📜 Recent Agent Logs (last 50 lines each):");
+                info!("📜 Recent Agent Activity:");
                 let log_dir = cli.town.join(".tt/logs");
                 if log_dir.exists() {
                     let mut shown_logs = std::collections::HashSet::new();
@@ -1189,12 +1480,117 @@ async fn main() -> Result<()> {
                         if log_file.exists() && !shown_logs.contains(&agent.name) {
                             shown_logs.insert(agent.name.clone());
                             info!("");
-                            info!("--- {} ({}) ---", agent.name, log_file.display());
+                            info!("--- {} ---", agent.name);
                             if let Ok(content) = std::fs::read_to_string(&log_file) {
                                 let lines: Vec<&str> = content.lines().collect();
                                 let start = lines.len().saturating_sub(50);
+                                let mut shown = 0;
+                                let mut consecutive_rounds: Vec<u32> = Vec::new();
+                                let mut last_line: Option<String> = None;
+
                                 for line in &lines[start..] {
-                                    info!("  {}", line);
+                                    if shown >= 15 {
+                                        break;
+                                    }
+                                    // Parse and clean up log lines for better UX
+                                    if let Some(cleaned) = clean_log_line(line) {
+                                        if cleaned.is_empty() {
+                                            continue;
+                                        }
+
+                                        // Detect round completion patterns:
+                                        // "✅ Round N complete" or "Round N: ✅ completed"
+                                        let is_round_complete = (cleaned.contains("Round ") && cleaned.contains("complete"))
+                                            && (cleaned.contains("✅") || cleaned.contains("completed"));
+
+                                        if is_round_complete {
+                                            // Extract round number - try both formats
+                                            if let Some(round_str) = cleaned.split("Round ").nth(1) {
+                                                // Handle both "Round N complete" and "Round N:"
+                                                let num_part = round_str
+                                                    .split_whitespace().next()
+                                                    .or_else(|| round_str.split(':').next())
+                                                    .unwrap_or("");
+                                                if let Ok(round_num) = num_part.trim().parse::<u32>() {
+                                                    consecutive_rounds.push(round_num);
+                                                    continue;
+                                                }
+                                            }
+                                        }
+
+                                        // Before showing a non-round line, flush any accumulated rounds
+                                        if !consecutive_rounds.is_empty() {
+                                            if consecutive_rounds.len() == 1 {
+                                                info!("  ✅ Round {} completed", consecutive_rounds[0]);
+                                            } else {
+                                                let min_round = consecutive_rounds.iter().min().unwrap_or(&0);
+                                                let max_round = consecutive_rounds.iter().max().unwrap_or(&0);
+                                                info!("  ✅ Rounds {}-{} completed ({} rounds)", min_round, max_round, consecutive_rounds.len());
+                                            }
+                                            shown += 1;
+                                            consecutive_rounds.clear();
+                                        }
+
+                                        // Skip duplicate consecutive lines
+                                        if Some(&cleaned) == last_line.as_ref() {
+                                            continue;
+                                        }
+
+                                        info!("  {}", cleaned);
+                                        last_line = Some(cleaned);
+                                        shown += 1;
+                                    }
+                                }
+
+                                // Flush any remaining accumulated rounds
+                                if !consecutive_rounds.is_empty() {
+                                    if consecutive_rounds.len() == 1 {
+                                        info!("  ✅ Round {} completed", consecutive_rounds[0]);
+                                    } else {
+                                        let min_round = consecutive_rounds.iter().min().unwrap_or(&0);
+                                        let max_round = consecutive_rounds.iter().max().unwrap_or(&0);
+                                        info!("  ✅ Rounds {}-{} completed ({} rounds)", min_round, max_round, consecutive_rounds.len());
+                                    }
+                                }
+                            }
+
+                            // Show last lines from most recent round log file
+                            // These files show what the AI is actually doing
+                            if let Some((round_num, round_log_path)) = find_latest_round_log(&log_dir, &agent.name) {
+                                info!("");
+                                info!("  📋 Latest Round {} Activity:", round_num);
+                                if let Ok(round_content) = std::fs::read_to_string(&round_log_path) {
+                                    let round_lines: Vec<&str> = round_content.lines().collect();
+                                    // Show last 8 meaningful lines
+                                    let mut meaningful_lines: Vec<&str> = Vec::new();
+                                    for line in round_lines.iter().rev() {
+                                        let trimmed = line.trim();
+                                        // Skip empty lines, ANSI-only lines, and noise
+                                        if trimmed.is_empty() {
+                                            continue;
+                                        }
+                                        // Skip lines that are mostly ANSI codes
+                                        let stripped = strip_ansi_codes(trimmed);
+                                        if stripped.is_empty() {
+                                            continue;
+                                        }
+                                        meaningful_lines.push(trimmed);
+                                        if meaningful_lines.len() >= 8 {
+                                            break;
+                                        }
+                                    }
+                                    // Display in chronological order
+                                    meaningful_lines.reverse();
+                                    for line in meaningful_lines {
+                                        // Clean up and truncate for display (use chars to avoid UTF-8 panic)
+                                        let display_line = strip_ansi_codes(line);
+                                        let truncated = if display_line.chars().count() > 80 {
+                                            format!("{}...", display_line.chars().take(77).collect::<String>())
+                                        } else {
+                                            display_line
+                                        };
+                                        info!("     {}", truncated);
+                                    }
                                 }
                             }
                         }
@@ -1255,97 +1651,129 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Tasks => {
-            use tinytown::TaskId;
-
+        Commands::Task { action } => {
             let town = Town::connect(&cli.town).await?;
-            let agents = town.list_agents().await;
 
-            if agents.is_empty() {
-                info!("No agents. Run 'tt spawn <name>' to create one.");
-            } else {
-                info!("📋 Pending Messages by Agent:");
-                info!("");
+            match action {
+                TaskAction::Complete { task_id, result } => {
+                    // Parse task ID
+                    let tid: tinytown::TaskId = task_id.parse().map_err(|e| {
+                        tinytown::Error::TaskNotFound(format!("Invalid task ID: {}", e))
+                    })?;
 
-                let mut total_actionable = 0;
-                for agent in &agents {
-                    let inbox_len = town.channel().inbox_len(agent.id).await.unwrap_or(0);
-                    if inbox_len == 0 {
-                        continue;
+                    // Get the task
+                    if let Some(mut task) = town.channel().get_task(tid).await? {
+                        // Mark as completed
+                        let result_msg = result.unwrap_or_else(|| "Completed".to_string());
+                        task.complete(&result_msg);
+                        town.channel().set_task(&task).await?;
+
+                        info!("✅ Task {} marked as completed", task_id);
+                        info!("   Description: {}", truncate_summary(&task.description, 60));
+                        info!("   Result: {}", truncate_summary(&result_msg, 60));
+                    } else {
+                        info!("❌ Task {} not found", task_id);
                     }
-
-                    let peek_count = std::cmp::min(inbox_len, 100) as isize;
-                    let messages = town
-                        .channel()
-                        .peek_inbox(agent.id, peek_count)
-                        .await
-                        .unwrap_or_default();
-                    if messages.is_empty() {
-                        continue;
-                    }
-
-                    let mut breakdown = MessageBreakdown::default();
-                    for msg in &messages {
-                        breakdown.count(&msg.msg_type);
-                    }
-
-                    info!("  {} ({:?}):", agent.name, agent.state);
-                    info!(
-                        "    🔴 {} tasks requiring action",
-                        breakdown.tasks + breakdown.other_actionable
-                    );
-                    info!("    🟡 {} queries awaiting response", breakdown.queries);
-                    info!("    🟢 {} informational", breakdown.informational);
-                    info!("    ⚪ {} confirmations", breakdown.confirmations);
-
-                    let mut shown = 0;
-                    for msg in &messages {
-                        if !matches!(
-                            classify_message(&msg.msg_type),
-                            MessageCategory::Task
-                                | MessageCategory::Query
-                                | MessageCategory::OtherActionable
-                        ) {
-                            continue;
-                        }
-                        if shown >= 5 {
-                            break;
-                        }
-
-                        let summary = match &msg.msg_type {
-                            tinytown::MessageType::TaskAssign { task_id } => {
-                                if let Ok(tid) = task_id.parse::<TaskId>() {
-                                    if let Ok(Some(task)) = town.channel().get_task(tid).await {
-                                        task.description
-                                    } else {
-                                        format!("Task {}", task_id)
-                                    }
-                                } else {
-                                    format!("Task {}", task_id)
-                                }
-                            }
-                            _ => summarize_message(&msg.msg_type),
-                        };
-                        info!("    • {}", truncate_summary(&summary, 90));
-                        shown += 1;
-                    }
-
-                    if shown == 0 {
-                        info!("    • (no actionable messages in sampled inbox)");
-                    }
-
-                    if inbox_len > messages.len() {
-                        info!("    …plus {} more message(s)", inbox_len - messages.len());
-                    }
-
-                    total_actionable += breakdown.actionable_count();
-                    info!("");
                 }
 
-                if total_actionable == 0 {
-                    info!("  (no actionable messages)");
-                } else {
-                    info!("Total: {} actionable message(s)", total_actionable);
+                TaskAction::Show { task_id } => {
+                    // Parse task ID
+                    let tid: tinytown::TaskId = task_id.parse().map_err(|e| {
+                        tinytown::Error::TaskNotFound(format!("Invalid task ID: {}", e))
+                    })?;
+
+                    // Get agents for name lookup
+                    let agents = town.list_agents().await;
+
+                    if let Some(task) = town.channel().get_task(tid).await? {
+                        info!("📋 Task: {}", task.id);
+                        info!("   Description: {}", task.description);
+                        info!("   State: {:?}", task.state);
+                        if let Some(agent_id) = task.assigned_to {
+                            // Look up agent name
+                            let agent_name = agents.iter()
+                                .find(|a| a.id == agent_id)
+                                .map(|a| a.name.clone())
+                                .unwrap_or_else(|| agent_id.to_string());
+                            info!("   Assigned to: {}", agent_name);
+                        }
+                        info!("   Created: {}", task.created_at);
+                        info!("   Updated: {}", task.updated_at);
+                        if let Some(started) = task.started_at {
+                            info!("   Started: {}", started);
+                        }
+                        if let Some(completed) = task.completed_at {
+                            info!("   Completed: {}", completed);
+                        }
+                        if let Some(result) = task.result {
+                            info!("   Result: {}", result);
+                        }
+                        if !task.tags.is_empty() {
+                            info!("   Tags: {}", task.tags.join(", "));
+                        }
+                    } else {
+                        info!("❌ Task {} not found", task_id);
+                    }
+                }
+
+                TaskAction::List { state } => {
+                    let tasks = town.channel().list_tasks().await?;
+                    // Get agents for name lookup
+                    let agents = town.list_agents().await;
+
+                    if tasks.is_empty() {
+                        info!("📋 No tasks found");
+                    } else {
+                        // Filter by state if provided
+                        let filtered: Vec<_> = if let Some(ref state_filter) = state {
+                            let target_state: tinytown::TaskState = match state_filter.to_lowercase().as_str() {
+                                "pending" => tinytown::TaskState::Pending,
+                                "assigned" => tinytown::TaskState::Assigned,
+                                "running" => tinytown::TaskState::Running,
+                                "completed" => tinytown::TaskState::Completed,
+                                "failed" => tinytown::TaskState::Failed,
+                                "cancelled" => tinytown::TaskState::Cancelled,
+                                _ => {
+                                    info!("❌ Unknown state filter: {}. Valid: pending, assigned, running, completed, failed, cancelled", state_filter);
+                                    return Ok(());
+                                }
+                            };
+                            tasks.into_iter().filter(|t| t.state == target_state).collect()
+                        } else {
+                            tasks
+                        };
+
+                        if filtered.is_empty() {
+                            info!("📋 No tasks found with state '{}'", state.unwrap_or_default());
+                        } else {
+                            info!("📋 Tasks ({}):", filtered.len());
+                            for task in &filtered {
+                                let status_icon = match task.state {
+                                    tinytown::TaskState::Pending => "⏳",
+                                    tinytown::TaskState::Assigned => "📌",
+                                    tinytown::TaskState::Running => "🔄",
+                                    tinytown::TaskState::Completed => "✅",
+                                    tinytown::TaskState::Failed => "❌",
+                                    tinytown::TaskState::Cancelled => "🚫",
+                                };
+                                // Look up agent name instead of showing UUID
+                                let agent = task.assigned_to
+                                    .and_then(|agent_id| {
+                                        agents.iter()
+                                            .find(|a| a.id == agent_id)
+                                            .map(|a| a.name.clone())
+                                    })
+                                    .unwrap_or_else(|| "unassigned".to_string());
+                                info!(
+                                    "   {} {} - {} [{}]",
+                                    status_icon,
+                                    task.id,
+                                    truncate_summary(&task.description, 50),
+                                    agent
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1416,18 +1844,119 @@ async fn main() -> Result<()> {
             }
         }
 
-        Commands::Inbox { agent } => {
+        Commands::Inbox { agent, all } => {
+            use tinytown::TaskId;
+
             let town = Town::connect(&cli.town).await?;
-            let handle = town.agent(&agent).await?;
-            let agent_id = handle.id();
 
-            // Check inbox length
-            let inbox_len = town.channel().inbox_len(agent_id).await?;
-            info!("📬 Inbox for '{}': {} messages", agent, inbox_len);
+            if all {
+                // Show pending messages for all agents (replaces old 'tt tasks' command)
+                let agents = town.list_agents().await;
 
-            // Try to receive messages (non-blocking peek would be better, but for now show count)
-            if inbox_len > 0 {
-                info!("   Use the agent loop to process messages");
+                if agents.is_empty() {
+                    info!("No agents. Run 'tt spawn <name>' to create one.");
+                } else {
+                    info!("📋 Pending Messages by Agent:");
+                    info!("");
+
+                    let mut total_actionable = 0;
+                    for agent in &agents {
+                        let inbox_len = town.channel().inbox_len(agent.id).await.unwrap_or(0);
+                        if inbox_len == 0 {
+                            continue;
+                        }
+
+                        let peek_count = std::cmp::min(inbox_len, 100) as isize;
+                        let messages = town
+                            .channel()
+                            .peek_inbox(agent.id, peek_count)
+                            .await
+                            .unwrap_or_default();
+                        if messages.is_empty() {
+                            continue;
+                        }
+
+                        let mut breakdown = MessageBreakdown::default();
+                        for msg in &messages {
+                            breakdown.count(&msg.msg_type);
+                        }
+
+                        info!("  {} ({:?}):", agent.name, agent.state);
+                        info!(
+                            "    [T] {} tasks requiring action",
+                            breakdown.tasks + breakdown.other_actionable
+                        );
+                        info!("    [Q] {} queries awaiting response", breakdown.queries);
+                        info!("    [I] {} informational", breakdown.informational);
+                        info!("    [C] {} confirmations", breakdown.confirmations);
+
+                        let mut shown = 0;
+                        for msg in &messages {
+                            if !matches!(
+                                classify_message(&msg.msg_type),
+                                MessageCategory::Task
+                                    | MessageCategory::Query
+                                    | MessageCategory::OtherActionable
+                            ) {
+                                continue;
+                            }
+                            if shown >= 5 {
+                                break;
+                            }
+
+                            let summary = match &msg.msg_type {
+                                tinytown::MessageType::TaskAssign { task_id } => {
+                                    if let Ok(tid) = task_id.parse::<TaskId>() {
+                                        if let Ok(Some(task)) = town.channel().get_task(tid).await {
+                                            task.description
+                                        } else {
+                                            format!("Task {}", task_id)
+                                        }
+                                    } else {
+                                        format!("Task {}", task_id)
+                                    }
+                                }
+                                _ => summarize_message(&msg.msg_type),
+                            };
+                            info!("    • {}", truncate_summary(&summary, 90));
+                            shown += 1;
+                        }
+
+                        if shown == 0 {
+                            info!("    • (no actionable messages in sampled inbox)");
+                        }
+
+                        if inbox_len > messages.len() {
+                            info!("    …plus {} more message(s)", inbox_len - messages.len());
+                        }
+
+                        total_actionable += breakdown.actionable_count();
+                        info!("");
+                    }
+
+                    if total_actionable == 0 {
+                        info!("  (no actionable messages)");
+                    } else {
+                        info!("Total: {} actionable message(s)", total_actionable);
+                    }
+                }
+            } else if let Some(agent_name) = agent {
+                // Show inbox for a specific agent
+                let handle = town.agent(&agent_name).await?;
+                let agent_id = handle.id();
+
+                // Check inbox length
+                let inbox_len = town.channel().inbox_len(agent_id).await?;
+                info!("📬 Inbox for '{}': {} messages", agent_name, inbox_len);
+
+                // Try to receive messages (non-blocking peek would be better, but for now show count)
+                if inbox_len > 0 {
+                    info!("   Use the agent loop to process messages");
+                }
+            } else {
+                info!("Usage: tt inbox <AGENT> or tt inbox --all");
+                info!("  tt inbox <agent>  - Show inbox for a specific agent");
+                info!("  tt inbox --all    - Show pending messages for all agents");
             }
         }
 
@@ -1772,6 +2301,7 @@ tt send <agent> --query "question"     # Ask for a response
 tt send <agent> --info "update"        # Send FYI update
 tt send <agent> --ack "received"       # Send acknowledgment
 tt send <agent> --urgent --query "..." # Priority message for next round
+tt task complete <task_id> --result "summary"  # Mark a task as done
 ```
 
 {backlog_section}
@@ -1789,7 +2319,8 @@ tt send <agent> --urgent --query "..." # Priority message for next round
 3. Claim only work that matches your role hint; do not claim unrelated tasks.
 4. Delegate or ask questions using semantic message types (`--query`, `--info`, `--ack`).
 5. If blocked, send a query with specific unblock needs.
-6. When finished, send informational updates or confirmations as appropriate.
+6. When finished with a task, mark it complete: `tt task complete <task_id> --result "what was done"`
+7. Send informational updates or confirmations as appropriate.
 
 Only run commands needed to complete listed work; inbox messages for this round are already provided above.
 "#,
@@ -2437,9 +2968,9 @@ Now, help the user orchestrate their project!
                                         )
                                     })
                                     .count();
-                                format!("✅ {} agents ({} active)", agents.len(), active)
+                                format!("[OK] {} agents ({} active)", agents.len(), active)
                             }
-                            Err(_) => "🔴 offline".to_string(),
+                            Err(_) => "[OFFLINE]".to_string(),
                         }
                     }
                 } else {
@@ -2752,6 +3283,13 @@ Now, help the user orchestrate their project!
             // Spawn the agent loop process
             let logs_dir = cli.town.join(".tt/logs");
             std::fs::create_dir_all(&logs_dir)?;
+
+            // Clean up old round log files to prevent stale data in 'tt status --deep'
+            let cleaned = clean_agent_round_logs(&logs_dir, &agent);
+            if cleaned > 0 {
+                info!("   Cleaned {} old round log file(s)", cleaned);
+            }
+
             let log_file = logs_dir.join(format!("{}.log", agent));
 
             let agent_loop_cmd = format!(
@@ -2811,6 +3349,93 @@ Now, help the user orchestrate their project!
                 );
             }
         },
+
+        Commands::Migrate { dry_run, force } => {
+            use tinytown::{migrate_to_town_isolation, needs_migration, preview_migration};
+
+            let town = Town::connect(&cli.town).await?;
+            let config = town.config();
+            let town_name = &config.name;
+
+            // Get a connection for migration
+            let redis_url = config.redis_url();
+            let client = redis::Client::open(redis_url)?;
+            let mut conn = redis::aio::ConnectionManager::new(client).await?;
+
+            // Check if migration is needed
+            let needs_mig = needs_migration(&mut conn).await?;
+            if !needs_mig {
+                info!("✅ No migration needed - all keys already use town isolation format");
+                info!("   Town: {}", town_name);
+                return Ok(());
+            }
+
+            if dry_run {
+                // Preview mode
+                info!("🔍 Migration Preview (dry run)");
+                info!("   Town: {}", town_name);
+                info!("");
+
+                let preview = preview_migration(&mut conn).await?;
+                if preview.is_empty() {
+                    info!("   No old-format keys found.");
+                } else {
+                    info!("   Keys to migrate:");
+                    for (old_key, new_pattern) in &preview {
+                        let new_key = new_pattern.replace("<town>", town_name);
+                        info!("   {} → {}", old_key, new_key);
+                    }
+                    info!("");
+                    info!("   Total: {} key(s) would be migrated", preview.len());
+                    info!("");
+                    info!("   Run 'tt migrate' (without --dry-run) to perform migration.");
+                }
+            } else {
+                // Actual migration
+                if !force {
+                    info!("⚠️  Migration Warning");
+                    info!("");
+                    info!("   This will migrate old Redis keys to the new town-isolated format:");
+                    info!("   tt:type:id → tt:{}:type:id", town_name);
+                    info!("");
+                    info!("   This operation cannot be undone.");
+                    info!("");
+                    info!("   Run with --force to skip this prompt, or --dry-run to preview.");
+                    info!("");
+
+                    // Use stderr for prompt, stdin for input
+                    eprint!("   Continue? [y/N]: ");
+                    let mut input = String::new();
+                    std::io::stdin().read_line(&mut input)?;
+                    if !input.trim().eq_ignore_ascii_case("y") {
+                        info!("   Migration cancelled.");
+                        return Ok(());
+                    }
+                }
+
+                info!("🔄 Migrating to town isolation...");
+                info!("   Town: {}", town_name);
+
+                let stats = migrate_to_town_isolation(&mut conn, town_name).await?;
+
+                info!("");
+                info!("✅ Migration complete!");
+                info!("   Agents migrated:  {}", stats.agents_migrated);
+                info!("   Inboxes migrated: {}", stats.inboxes_migrated);
+                info!("   Tasks migrated:   {}", stats.tasks_migrated);
+                info!("   Other keys:       {}",
+                    stats.urgent_migrated + stats.activity_migrated +
+                    stats.stop_migrated + stats.backlog_migrated);
+
+                if !stats.errors.is_empty() {
+                    warn!("");
+                    warn!("   ⚠️  {} key(s) failed to migrate:", stats.errors.len());
+                    for key in &stats.errors {
+                        warn!("      - {}", key);
+                    }
+                }
+            }
+        }
     }
 
     Ok(())

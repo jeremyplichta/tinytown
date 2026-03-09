@@ -102,21 +102,23 @@ tt tasks
 
 Or inspect directly in Redis:
 ```bash
-redis-cli -s ./redis.sock GET "tt:task:<uuid>"
+redis-cli -s ./redis.sock GET "tt:<town_name>:task:<uuid>"
 ```
 
 ## Task Storage in Redis
 
-Tasks are stored as JSON:
+Tasks are stored as JSON using town-isolated keys:
 
 ```
-tt:task:<uuid>  →  JSON serialized Task struct
+tt:<town_name>:task:<uuid>  →  JSON serialized Task struct
 ```
 
-You can inspect tasks directly:
+This allows multiple towns to share the same Redis instance. You can inspect tasks directly:
 ```bash
-redis-cli -s ./redis.sock GET "tt:task:550e8400-e29b-41d4-a716-446655440000"
+redis-cli -s ./redis.sock GET "tt:<town_name>:task:550e8400-e29b-41d4-a716-446655440000"
 ```
+
+See [tt migrate](../cli/migrate.md) for upgrading from older key formats.
 
 ## Hierarchical Tasks
 
