@@ -57,6 +57,7 @@ pub mod town;
 pub use agent::{Agent, AgentId, AgentState, AgentType};
 pub use app::audit::{AuditEvent, AuditResult, audit_middleware};
 pub use app::auth::{AuthError, AuthState, Principal, auth_middleware, generate_api_key};
+pub use app::mcp::{McpState, create_mcp_router};
 pub use app::rate_limit::{RateLimitConfig, RateLimiter, rate_limit_middleware};
 pub use app::server::{AppState, ProblemDetails, create_router};
 pub use app::services::{

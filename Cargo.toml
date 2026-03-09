@@ -47,6 +47,10 @@ argon2 = { version = "0.5.3", features = ["password-hash"] }
 hex = "0.4.3"
 getrandom = "0.4.2"
 
+# MCP (Model Context Protocol)
+tower-mcp = { version = "0.8", features = ["http", "testing"] }
+schemars = "1.2"
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.19"
