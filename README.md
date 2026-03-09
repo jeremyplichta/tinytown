@@ -69,6 +69,23 @@ That's it! Your agents are now coordinating via Redis.
 
 > **Note:** `tt bootstrap` delegates to an AI agent to download Redis from GitHub and compile it for your machine. Alternatively: `brew install redis` (macOS) or `apt install redis-server` (Ubuntu).
 
+## 🌐 Programmatic Interfaces
+
+Tinytown also ships a `townhall` control plane binary with both REST and MCP interfaces.
+
+```bash
+# REST API (default: 127.0.0.1:8080)
+townhall rest
+
+# MCP over stdio
+townhall mcp-stdio
+
+# MCP over HTTP/SSE (default: REST port + 1)
+townhall mcp-http
+```
+
+REST OpenAPI spec: `docs/openapi/townhall-v1.yaml`
+
 ## 🏗️ Architecture
 
 Tinytown is built on **6 core concepts**:

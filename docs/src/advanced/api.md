@@ -4,6 +4,8 @@ The Tinytown Rust API for programmatic control.
 
 ## Quick Links
 
+- [Townhall REST API](./townhall-rest.md) — HTTP control plane daemon
+- [Townhall MCP Server](./townhall-mcp.md) — MCP tools/resources/prompts
 - [Full rustdoc](https://redis-field-engineering.github.io/tinytown/tinytown/) — Complete API documentation
 
 ## Core Types

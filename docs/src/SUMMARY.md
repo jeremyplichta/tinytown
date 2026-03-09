@@ -67,6 +67,8 @@
 - [Custom Models](./advanced/custom-models.md)
 - [Redis Configuration](./advanced/redis.md)
 - [Townhall Control Plane](./advanced/townhall.md)
+- [Townhall REST API](./advanced/townhall-rest.md)
+- [Townhall MCP Server](./advanced/townhall-mcp.md)
 - [MCP Interface](./advanced/mcp.md)
 - [Authentication & Authorization](./advanced/auth.md)
 - [API Reference](./advanced/api.md)
