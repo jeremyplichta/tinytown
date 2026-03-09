@@ -34,6 +34,10 @@ pub struct Config {
     #[serde(default)]
     pub redis: RedisConfig,
 
+    /// Townhall daemon configuration
+    #[serde(default)]
+    pub townhall: TownhallConfig,
+
     /// Available agent CLIs (e.g., claude, auggie, codex)
     #[serde(default)]
     pub agent_clis: HashMap<String, AgentCli>,
@@ -50,6 +54,40 @@ pub struct Config {
     /// This is set at creation time based on GlobalConfig and not re-read
     #[serde(default)]
     pub use_central_redis: bool,
+}
+
+/// Townhall daemon configuration.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TownhallConfig {
+    /// Bind address for REST API
+    #[serde(default = "default_bind")]
+    pub bind: String,
+
+    /// REST API port
+    #[serde(default = "default_rest_port")]
+    pub rest_port: u16,
+
+    /// Request timeout in milliseconds
+    #[serde(default = "default_timeout_ms")]
+    pub request_timeout_ms: u64,
+}
+
+fn default_rest_port() -> u16 {
+    8080
+}
+
+fn default_timeout_ms() -> u64 {
+    30000
+}
+
+impl Default for TownhallConfig {
+    fn default() -> Self {
+        Self {
+            bind: default_bind(),
+            rest_port: default_rest_port(),
+            request_timeout_ms: default_timeout_ms(),
+        }
+    }
 }
 
 fn default_cli() -> String {
@@ -262,6 +300,7 @@ impl Config {
             default_cli: global.default_cli.clone(),
             max_agents: 10,
             use_central_redis,
+            townhall: TownhallConfig::default(),
         }
     }
 

@@ -34,6 +34,7 @@ const TASKS_DIR: &str = ".tt/tasks";
 const MIN_REDIS_VERSION: (u32, u32) = (8, 0);
 
 /// The Town orchestrates agents and message passing.
+#[derive(Clone)]
 pub struct Town {
     config: Config,
     channel: Channel,

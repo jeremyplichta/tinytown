@@ -43,6 +43,7 @@
 //! ```
 
 pub mod agent;
+pub mod app;
 pub mod channel;
 pub mod config;
 pub mod error;
@@ -54,6 +55,10 @@ pub mod task;
 pub mod town;
 
 pub use agent::{Agent, AgentId, AgentState, AgentType};
+pub use app::server::{AppState, ProblemDetails, create_router};
+pub use app::services::{
+    AgentService, BacklogService, MessageService, RecoveryService, TaskService,
+};
 pub use channel::Channel;
 pub use config::Config;
 pub use error::{Error, Result};
