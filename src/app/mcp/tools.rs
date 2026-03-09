@@ -43,6 +43,16 @@ pub struct AssignTaskInput {
     pub description: String,
 }
 
+/// Input for completing a task.
+#[derive(Debug, Deserialize, JsonSchema)]
+pub struct CompleteTaskInput {
+    /// Task ID to mark as completed
+    pub task_id: String,
+    /// Optional result/summary message
+    #[serde(default)]
+    pub result: Option<String>,
+}
+
 /// Input for sending a message.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SendMessageInput {
@@ -341,6 +351,47 @@ pub fn task_assign_tool(state: Arc<McpState>) -> Tool {
         .build()
 }
 
+/// Create the task.complete tool.
+pub fn task_complete_tool(state: Arc<McpState>) -> Tool {
+    let s = state.clone();
+    ToolBuilder::new("task.complete")
+        .description("Mark a task as completed")
+        .handler(move |input: CompleteTaskInput| {
+            let state = s.clone();
+            async move {
+                use crate::TaskId;
+                let task_id: TaskId = match input.task_id.parse() {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return Ok(error_response(format!(
+                            "Invalid task ID: {}",
+                            input.task_id
+                        )));
+                    }
+                };
+                let channel = state.town.channel();
+                match channel.get_task(task_id).await {
+                    Ok(Some(mut task)) => {
+                        let result_msg = input.result.unwrap_or_else(|| "Completed".to_string());
+                        task.complete(&result_msg);
+                        match channel.set_task(&task).await {
+                            Ok(()) => Ok(json_result(serde_json::json!({
+                                "task_id": task_id.to_string(),
+                                "description": task.description,
+                                "result": result_msg,
+                                "status": "completed"
+                            }))),
+                            Err(e) => Ok(error_response(e.to_string())),
+                        }
+                    }
+                    Ok(None) => Ok(error_response(format!("Task {} not found", task_id))),
+                    Err(e) => Ok(error_response(e.to_string())),
+                }
+            }
+        })
+        .build()
+}
+
 /// Create the message.send tool.
 pub fn message_send_tool(state: Arc<McpState>) -> Tool {
     let s = state.clone();
@@ -536,6 +587,7 @@ pub fn read_tools(state: Arc<McpState>) -> Vec<Tool> {
 pub fn write_tools(state: Arc<McpState>) -> Vec<Tool> {
     vec![
         task_assign_tool(state.clone()),
+        task_complete_tool(state.clone()),
         message_send_tool(state.clone()),
         backlog_add_tool(state.clone()),
         backlog_claim_tool(state.clone()),

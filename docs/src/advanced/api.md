@@ -100,17 +100,40 @@ let msg = msg.with_correlation(other_msg.id);
 
 ```rust
 pub enum MessageType {
+    // Semantic types for inter-agent communication
+    Task { description: String },
+    Query { question: String },
+    Informational { summary: String },
+    Confirmation { ack_type: ConfirmationType },
+
+    // Task lifecycle
     TaskAssign { task_id: String },
     TaskDone { task_id: String, result: String },
     TaskFailed { task_id: String, error: String },
+
+    // Status
     StatusRequest,
     StatusResponse { state: String, current_task: Option<String> },
+
+    // Lifecycle
     Ping,
     Pong,
     Shutdown,
+
+    // Extensibility
     Custom { kind: String, payload: String },
 }
+
+pub enum ConfirmationType {
+    Received,
+    Acknowledged,
+    Thanks,
+    Approved,
+    Rejected { reason: String },
+}
 ```
+
+Helpers: `msg.is_actionable()`, `msg.is_informational_or_confirmation()`
 
 ### Channel
 

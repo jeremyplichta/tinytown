@@ -207,12 +207,12 @@ Direct, simple, explicit.
 
 ### Tinytown: Redis
 
-Everything in Redis:
-- `tt:agent:<id>` - Agent state
-- `tt:task:<id>` - Task state
-- `tt:inbox:<id>` - Message queues
+Everything in Redis with town-isolated keys:
+- `tt:<town>:agent:<id>` - Agent state
+- `tt:<town>:task:<id>` - Task state
+- `tt:<town>:inbox:<id>` - Message queues
 
-Enable Redis persistence (RDB/AOF) for durability.
+Enable Redis persistence (RDB/AOF) for durability. Multiple towns can share the same Redis instance.
 
 ## Recovery
 

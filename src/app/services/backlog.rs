@@ -112,7 +112,7 @@ impl BacklogService {
         let agent_handle = town.agent(agent_name).await?;
         let agent_id = agent_handle.id();
 
-        // Update task assignment
+        // Update task assignment (consistent with tt assign - agent will start() when working)
         if let Some(mut task) = channel.get_task(task_id).await? {
             task.assign(agent_id);
             channel.set_task(&task).await?;
@@ -133,6 +133,13 @@ impl BacklogService {
             agent_id,
             agent_name: agent_name.to_string(),
         })
+    }
+
+    /// Remove a task from the backlog without assigning it.
+    ///
+    /// Returns true if the task was found and removed, false otherwise.
+    pub async fn remove(channel: &Channel, task_id: TaskId) -> Result<bool> {
+        channel.backlog_remove(task_id).await
     }
 
     /// Assign all backlog tasks to an agent.

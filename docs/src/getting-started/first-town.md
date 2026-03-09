@@ -104,7 +104,7 @@ watch -n 5 tt status
 
 1. **Task Creation**: Each `tt assign` creates a `Task` with a unique ID
 2. **Message Sending**: A `Message` of type `TaskAssign` is sent to the agent's inbox
-3. **Redis Queue**: Messages are stored in Redis lists (`tt:inbox:<agent-id>`)
+3. **Redis Queue**: Messages are stored in town-isolated Redis lists (`tt:<town>:inbox:<agent-id>`)
 4. **Agent Pickup**: Agents receive messages via `BLPOP` (blocking pop)
 5. **State Tracking**: Agent and task states are stored in Redis
 

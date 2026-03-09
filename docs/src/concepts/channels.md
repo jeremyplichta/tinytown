@@ -23,7 +23,7 @@ Redis is perfect for agent orchestration:
 channel.send(&message).await?;
 ```
 
-Messages go to the recipient's inbox (`tt:inbox:<agent-id>`).
+Messages go to the recipient's inbox (`tt:<town>:inbox:<agent-id>`).
 
 Priority handling:
 - `Urgent` / `High` → `LPUSH` (front of queue)
@@ -70,7 +70,7 @@ channel.set_agent_state(&agent).await?;
 let agent = channel.get_agent_state(agent_id).await?;
 ```
 
-Stored at: `tt:agent:<uuid>`
+Stored at: `tt:<town>:agent:<uuid>`
 
 ### Task State
 
@@ -82,16 +82,20 @@ channel.set_task(&task).await?;
 let task = channel.get_task(task_id).await?;
 ```
 
-Stored at: `tt:task:<uuid>`
+Stored at: `tt:<town>:task:<uuid>`
 
 ## Redis Key Patterns
 
+Keys are town-isolated to allow multiple towns to share the same Redis instance:
+
 | Pattern | Type | Purpose |
 |---------|------|---------|
-| `tt:inbox:<uuid>` | List | Agent message queue |
-| `tt:agent:<uuid>` | String | Agent state (JSON) |
-| `tt:task:<uuid>` | String | Task state (JSON) |
+| `tt:<town>:inbox:<uuid>` | List | Agent message queue |
+| `tt:<town>:agent:<uuid>` | String | Agent state (JSON) |
+| `tt:<town>:task:<uuid>` | String | Task state (JSON) |
 | `tt:broadcast` | Pub/Sub | Broadcast channel |
+
+See [tt migrate](../cli/migrate.md) for upgrading from older key formats.
 
 ## Direct Redis Access
 
@@ -101,14 +105,14 @@ Sometimes you want to query Redis directly:
 # Connect to town's Redis
 redis-cli -s ./redis.sock
 
-# List all agent inboxes
-KEYS tt:inbox:*
+# List all agent inboxes for your town
+KEYS tt:<town_name>:inbox:*
 
 # Check inbox length
-LLEN tt:inbox:550e8400-e29b-41d4-a716-446655440000
+LLEN tt:<town_name>:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # View agent state
-GET tt:agent:550e8400-e29b-41d4-a716-446655440000
+GET tt:<town_name>:agent:550e8400-e29b-41d4-a716-446655440000
 
 # Monitor all messages
 MONITOR

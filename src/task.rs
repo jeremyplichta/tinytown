@@ -58,7 +58,8 @@ pub enum TaskState {
     Pending,
     /// Task is assigned to an agent
     Assigned,
-    /// Task is being worked on
+    /// Task is being worked on (in-flight)
+    #[serde(alias = "in_flight")]
     Running,
     /// Task completed successfully
     Completed,
@@ -73,6 +74,12 @@ impl TaskState {
     #[must_use]
     pub fn is_terminal(&self) -> bool {
         matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
+    }
+
+    /// Check if task is in-flight (being actively worked on).
+    #[must_use]
+    pub fn is_in_flight(&self) -> bool {
+        matches!(self, Self::Running)
     }
 }
 
@@ -91,6 +98,9 @@ pub struct Task {
     pub created_at: DateTime<Utc>,
     /// When the task was last updated
     pub updated_at: DateTime<Utc>,
+    /// When work on the task started (if applicable)
+    #[serde(default)]
+    pub started_at: Option<DateTime<Utc>>,
     /// When the task was completed (if applicable)
     pub completed_at: Option<DateTime<Utc>>,
     /// Result or error message
@@ -114,6 +124,7 @@ impl Task {
             assigned_to: None,
             created_at: now,
             updated_at: now,
+            started_at: None,
             completed_at: None,
             result: None,
             parent_id: None,
@@ -142,10 +153,12 @@ impl Task {
         self.updated_at = Utc::now();
     }
 
-    /// Mark task as running.
+    /// Mark task as running (in-flight).
     pub fn start(&mut self) {
+        let now = Utc::now();
         self.state = TaskState::Running;
-        self.updated_at = Utc::now();
+        self.started_at = Some(now);
+        self.updated_at = now;
     }
 
     /// Mark task as completed with a result.

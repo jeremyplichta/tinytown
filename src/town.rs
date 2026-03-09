@@ -377,7 +377,7 @@ impl Town {
         .await
         .map_err(|_| Error::Timeout("Redis connection timed out".into()))??;
 
-        Ok(Channel::new(conn))
+        Ok(Channel::new(conn, &config.name))
     }
 
     /// Spawn a new worker agent.

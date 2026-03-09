@@ -27,7 +27,7 @@ Think of it as:
 | **Setup time** | 30 seconds | Hours |
 | **Config files** | 1 TOML | 10+ YAML files |
 | **Core concepts** | 5 types | 50+ concepts |
-| **CLI commands** | 13 | 50+ |
+| **CLI commands** | 14 | 50+ |
 | **Message latency** | <1ms (Unix socket) | 10-100ms |
 | **Lines of code** | ~2,600 | 50,000+ |
 
@@ -129,8 +129,9 @@ Tinytown is built on **6 core concepts**:
 | `tt assign <agent> <task>` | Assign a task |
 | `tt backlog <subcommand>` | Manage unassigned task backlog |
 | `tt list` | List all agents |
-| `tt status [--deep]` | Show town status (--deep for activity) |
+| `tt status [--deep] [--tasks]` | Show town status (--deep for activity, --tasks for task details) |
 | `tt kill <agent>` | Stop an agent gracefully |
+| `tt reset [--force] [--agents-only]` | Reset all town state (clear agents, tasks, messages) |
 | `tt inbox <agent>` | Check agent's message inbox |
 | `tt send [--urgent] <agent> <msg>` | Send message to agent |
 | `tt conductor` | 🚂 AI orchestrator mode |
@@ -138,6 +139,21 @@ Tinytown is built on **6 core concepts**:
 | `tt sync [push\|pull]` | Sync tasks.toml ↔ Redis |
 | `tt save` | Save Redis state to AOF (for git) |
 | `tt restore` | Restore Redis state from AOF |
+| `tt migrate [--dry-run] [--force]` | Migrate keys to town-isolated format |
+
+## 🏛️ Townhall (HTTP Control Plane)
+
+Townhall exposes Tinytown operations via REST API and MCP (Model Context Protocol):
+
+```bash
+# Start REST API server (default port 8787)
+townhall
+
+# Start MCP server for Claude Desktop integration
+townhall mcp-stdio
+```
+
+See [Townhall Documentation](https://redis-field-engineering.github.io/tinytown/advanced/townhall.html) for API reference and authentication options.
 
 ## 🤖 Supported Agent CLIs
 

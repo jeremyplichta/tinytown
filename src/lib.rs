@@ -49,6 +49,7 @@ pub mod config;
 pub mod error;
 pub mod global_config;
 pub mod message;
+pub mod migration;
 pub mod plan;
 pub mod redis_manager;
 pub mod task;
@@ -68,6 +69,10 @@ pub use config::{AuthConfig, AuthMode, Config, MtlsConfig, Scope, TlsConfig, Tow
 pub use error::{Error, Result};
 pub use global_config::GlobalConfig;
 pub use message::{ConfirmationType, Message, MessageId, MessageType, Priority};
+pub use migration::{
+    HashMigrationStats, MigrationStats, migrate_json_to_hash, migrate_to_town_isolation,
+    needs_hash_migration, needs_migration, preview_hash_migration, preview_migration,
+};
 pub use plan::{TaskEntry, TasksFile, TasksMeta};
 pub use redis_manager::RedisManager;
 pub use task::{Task, TaskId, TaskState};

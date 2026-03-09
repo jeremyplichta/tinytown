@@ -54,7 +54,7 @@ async fn create_test_town(name: &str) -> Result<TownGuard, Box<dyn std::error::E
 
 /// Helper to kill Redis when test ends (only for per-town Redis, not central)
 fn cleanup_redis(temp_dir: &TempDir) {
-    let pid_file = temp_dir.path().join("redis.pid");
+    let pid_file = temp_dir.path().join(".tt/redis.pid");
     if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
         && let Ok(pid) = pid_str.trim().parse::<i32>()
     {
@@ -386,6 +386,7 @@ async fn test_task_state_transitions() -> Result<(), Box<dyn std::error::Error>>
 
     task.start();
     assert_eq!(task.state, TaskState::Running);
+    assert!(task.started_at.is_some()); // Verify started_at is set when task becomes in-flight
 
     task.complete("Task completed successfully");
     assert_eq!(task.state, TaskState::Completed);

@@ -101,26 +101,26 @@ cargo run
 ## The Message Flow
 
 ```
-Your Code                     Redis                        Agent
-    │                           │                            │
-    │  spawn_agent()            │                            │
-    │ ─────────────────────────►│                            │
-    │                           │  SET tt:agent:xxx          │
-    │                           │ ───────────────────────────│
-    │                           │                            │
-    │  assign(task)             │                            │
-    │ ─────────────────────────►│                            │
-    │                           │  SET tt:task:yyy           │
-    │                           │  RPUSH tt:inbox:xxx        │
-    │                           │ ───────────────────────────│
-    │                           │                            │
-    │                           │  BLPOP tt:inbox:xxx        │
-    │                           │◄───────────────────────────│
-    │                           │                            │
-    │  state()                  │                            │
-    │ ─────────────────────────►│                            │
-    │                           │  GET tt:agent:xxx          │
-    │◄───────────────────────── │                            │
+Your Code                     Redis                              Agent
+    │                           │                                  │
+    │  spawn_agent()            │                                  │
+    │ ─────────────────────────►│                                  │
+    │                           │  SET tt:<town>:agent:xxx         │
+    │                           │ ─────────────────────────────────│
+    │                           │                                  │
+    │  assign(task)             │                                  │
+    │ ─────────────────────────►│                                  │
+    │                           │  SET tt:<town>:task:yyy          │
+    │                           │  RPUSH tt:<town>:inbox:xxx       │
+    │                           │ ─────────────────────────────────│
+    │                           │                                  │
+    │                           │  BLPOP tt:<town>:inbox:xxx       │
+    │                           │◄─────────────────────────────────│
+    │                           │                                  │
+    │  state()                  │                                  │
+    │ ─────────────────────────►│                                  │
+    │                           │  GET tt:<town>:agent:xxx         │
+    │◄───────────────────────── │                                  │
 ```
 
 ## Simulating the Agent
@@ -128,11 +128,11 @@ Your Code                     Redis                        Agent
 In a real workflow, Claude (or another AI) receives the task. For testing, you can simulate completion:
 
 ```bash
-# In redis-cli
+# In redis-cli (replace <town> with your town name)
 redis-cli -s ./redis.sock
 
 # Get the inbox message
-LPOP tt:inbox:550e8400-e29b-41d4-a716-446655440000
+LPOP tt:<town>:inbox:550e8400-e29b-41d4-a716-446655440000
 
 # Update agent state to idle
 # (In practice, the agent process does this)

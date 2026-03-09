@@ -109,7 +109,7 @@ tt spawn tester &
 
 ## What Happens
 
-1. **Agent registered** in Redis (`tt:agent:<id>`)
+1. **Agent registered** in Redis (`tt:<town>:agent:<id>`)
 2. **Background process** started running `tt agent-loop`
 3. **Agent loop**:
    - Checks inbox for messages
