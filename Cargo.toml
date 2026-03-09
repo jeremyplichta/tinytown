@@ -39,6 +39,11 @@ toml = "1.0.6"
 dirs = "6.0.0"
 libc = "0.2.183"
 
+# Web (for townhall)
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["compression-full", "cors", "timeout", "trace", "request-id"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 tempfile = "3.19"
@@ -46,7 +51,12 @@ testcontainers = "0.24"
 testcontainers-modules = { version = "0.12", features = ["redis"] }
 libc = "0.2.183"
 serial_test = "3.4.0"
+axum-test = "19.1.1"
 
 [[bin]]
 name = "tt"
 path = "src/main.rs"
+
+[[bin]]
+name = "townhall"
+path = "src/bin/townhall.rs"
