@@ -104,6 +104,9 @@ impl TaskService {
     }
 
     /// Get a task by ID.
+    ///
+    /// Reserved for future use (e.g., task status endpoint).
+    #[allow(dead_code)]
     pub async fn get(channel: &Channel, task_id: TaskId) -> Result<Option<Task>> {
         channel.get_task(task_id).await
     }

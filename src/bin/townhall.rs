@@ -68,6 +68,9 @@ async fn main() -> tinytown::Result<()> {
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(timeout_layer)
+        // TODO(#16): Replace permissive CORS with restricted configuration once
+        // authentication is implemented. Current wide-open policy is intentional
+        // for local development but should not be used in production.
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)

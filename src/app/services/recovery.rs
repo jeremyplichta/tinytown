@@ -113,7 +113,13 @@ impl RecoveryService {
         let mut total_reclaimed = 0;
 
         for agent in dead_agents {
-            let messages = channel.drain_inbox(agent.id).await?;
+            // Drain both regular and urgent inboxes to ensure no task messages are lost
+            let regular_messages = channel.drain_inbox(agent.id).await?;
+            let urgent_messages = channel.receive_urgent(agent.id).await?;
+            let messages: Vec<_> = urgent_messages
+                .into_iter()
+                .chain(regular_messages)
+                .collect();
 
             for msg in messages {
                 match &msg.msg_type {

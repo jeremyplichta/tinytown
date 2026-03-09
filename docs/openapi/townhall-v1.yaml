@@ -1,0 +1,639 @@
+openapi: 3.1.0
+info:
+  title: Townhall API
+  version: 1.0.0
+  description: |
+    REST API for Tinytown multi-agent orchestration.
+
+    Townhall provides HTTP access to all Tinytown operations that were previously
+    only available via the `tt` CLI. This enables mobile, web, and automation clients
+    to manage agent towns.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  contact:
+    name: Tinytown
+    url: https://github.com/redis-field-engineering/tinytown
+
+servers:
+  - url: http://localhost:8787
+    description: Local development server
+
+tags:
+  - name: Health
+    description: Health check endpoints
+  - name: Town
+    description: Town information and status
+  - name: Agents
+    description: Agent lifecycle management
+  - name: Tasks
+    description: Task assignment operations
+  - name: Backlog
+    description: Global backlog management
+  - name: Messages
+    description: Inter-agent messaging
+  - name: Recovery
+    description: Recovery and reclaim operations
+
+paths:
+  /healthz:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /v1/town:
+    get:
+      tags: [Town]
+      summary: Get town information
+      operationId: getTown
+      responses:
+        '200':
+          description: Town information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TownInfo'
+
+  /v1/status:
+    get:
+      tags: [Town]
+      summary: Get comprehensive town status with all agents
+      operationId: getStatus
+      parameters:
+        - name: deep
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include detailed agent information
+      responses:
+        '200':
+          description: Town status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TownStatus'
+
+  /v1/agents:
+    get:
+      tags: [Agents]
+      summary: List all agents
+      operationId: listAgents
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentList'
+    post:
+      tags: [Agents]
+      summary: Spawn a new agent
+      operationId: spawnAgent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SpawnAgentRequest'
+      responses:
+        '201':
+          description: Agent spawned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SpawnAgentResponse'
+
+  /v1/agents/{agent}/kill:
+    post:
+      tags: [Agents]
+      summary: Stop an agent gracefully
+      operationId: killAgent
+      parameters:
+        - $ref: '#/components/parameters/AgentName'
+      responses:
+        '200':
+          description: Agent stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentActionResponse'
+
+  /v1/agents/{agent}/restart:
+    post:
+      tags: [Agents]
+      summary: Restart a stopped agent
+      operationId: restartAgent
+      parameters:
+        - $ref: '#/components/parameters/AgentName'
+      responses:
+        '200':
+          description: Agent restarted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentActionResponse'
+
+
+  /v1/tasks/assign:
+    post:
+      tags: [Tasks]
+      summary: Assign a task to an agent
+      operationId: assignTask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTaskRequest'
+      responses:
+        '201':
+          description: Task assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignTaskResponse'
+
+  /v1/tasks/pending:
+    get:
+      tags: [Tasks]
+      summary: List pending tasks across all agents
+      operationId: listPendingTasks
+      responses:
+        '200':
+          description: Pending tasks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingTaskList'
+
+  /v1/backlog:
+    get:
+      tags: [Backlog]
+      summary: List backlog tasks
+      operationId: listBacklog
+      responses:
+        '200':
+          description: Backlog items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacklogList'
+    post:
+      tags: [Backlog]
+      summary: Add task to backlog
+      operationId: addToBacklog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddBacklogRequest'
+      responses:
+        '201':
+          description: Task added to backlog
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AddBacklogResponse'
+
+  /v1/backlog/{task_id}/claim:
+    post:
+      tags: [Backlog]
+      summary: Claim a backlog task for an agent
+      operationId: claimBacklogTask
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClaimRequest'
+      responses:
+        '200':
+          description: Task claimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClaimResponse'
+
+  /v1/backlog/assign-all:
+    post:
+      tags: [Backlog]
+      summary: Assign all backlog tasks to an agent
+      operationId: assignAllBacklog
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignAllRequest'
+      responses:
+        '200':
+          description: Tasks assigned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssignAllResponse'
+
+  /v1/messages/send:
+    post:
+      tags: [Messages]
+      summary: Send a message to an agent
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '201':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+
+  /v1/agents/{agent}/inbox:
+    post:
+      tags: [Messages]
+      summary: Get agent inbox
+      operationId: getInbox
+      parameters:
+        - $ref: '#/components/parameters/AgentName'
+      responses:
+        '200':
+          description: Inbox contents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboxResponse'
+
+  /v1/recover:
+    post:
+      tags: [Recovery]
+      summary: Recover orphaned agents
+      operationId: recover
+      responses:
+        '200':
+          description: Recovery complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoverResponse'
+
+  /v1/reclaim:
+    post:
+      tags: [Recovery]
+      summary: Reclaim tasks from dead agents
+      operationId: reclaim
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReclaimRequest'
+      responses:
+        '200':
+          description: Tasks reclaimed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReclaimResponse'
+
+components:
+  parameters:
+    AgentName:
+      name: agent
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Agent name
+    TaskId:
+      name: task_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Task UUID
+
+  schemas:
+    TownInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        root:
+          type: string
+        redis_url:
+          type: string
+
+    TownStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        root:
+          type: string
+        redis_url:
+          type: string
+        agent_count:
+          type: integer
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInfo'
+
+    AgentInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        cli:
+          type: string
+        state:
+          type: string
+          enum: [Idle, Working, Starting, Stopped, Error]
+        rounds_completed:
+          type: integer
+        tasks_completed:
+          type: integer
+        inbox_len:
+          type: integer
+        urgent_len:
+          type: integer
+
+    AgentList:
+      type: object
+      properties:
+        agents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentInfo'
+        count:
+          type: integer
+
+    SpawnAgentRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        cli:
+          type: string
+
+    SpawnAgentResponse:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        name:
+          type: string
+        cli:
+          type: string
+
+    AgentActionResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        agent:
+          type: string
+
+    PruneRequest:
+      type: object
+      properties:
+        all:
+          type: boolean
+          default: false
+
+    PruneResponse:
+      type: object
+      properties:
+        removed:
+          type: integer
+        agents:
+          type: array
+          items:
+            type: string
+
+    AssignTaskRequest:
+      type: object
+      required: [agent, task]
+      properties:
+        agent:
+          type: string
+        task:
+          type: string
+
+    AssignTaskResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+
+    PendingTaskList:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            type: object
+            properties:
+              task_id:
+                type: string
+              description:
+                type: string
+              agent_id:
+                type: string
+              agent_name:
+                type: string
+        count:
+          type: integer
+
+    AddBacklogRequest:
+      type: object
+      required: [description]
+      properties:
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    AddBacklogResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        description:
+          type: string
+
+    BacklogList:
+      type: object
+      properties:
+        backlog:
+          type: array
+          items:
+            type: object
+            properties:
+              task_id:
+                type: string
+              description:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+        count:
+          type: integer
+
+    ClaimRequest:
+      type: object
+      required: [agent]
+      properties:
+        agent:
+          type: string
+
+    ClaimResponse:
+      type: object
+      properties:
+        task_id:
+          type: string
+        agent_id:
+          type: string
+        agent_name:
+          type: string
+
+    AssignAllRequest:
+      type: object
+      required: [agent]
+      properties:
+        agent:
+          type: string
+
+    AssignAllResponse:
+      type: object
+      properties:
+        assigned:
+          type: integer
+        tasks:
+          type: array
+          items:
+            type: string
+
+    SendMessageRequest:
+      type: object
+      required: [to, message]
+      properties:
+        to:
+          type: string
+        message:
+          type: string
+        kind:
+          type: string
+          enum: [task, query, info, ack]
+          default: task
+        urgent:
+          type: boolean
+          default: false
+
+    SendMessageResponse:
+      type: object
+      properties:
+        message_id:
+          type: string
+        to_agent:
+          type: string
+        urgent:
+          type: boolean
+
+    InboxResponse:
+      type: object
+      properties:
+        agent:
+          type: string
+        total:
+          type: integer
+        urgent:
+          type: integer
+        messages:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              from:
+                type: string
+              type:
+                type: string
+              summary:
+                type: string
+
+    RecoverResponse:
+      type: object
+      properties:
+        checked:
+          type: integer
+        recovered:
+          type: integer
+        agents:
+          type: array
+          items:
+            type: string
+
+    ReclaimRequest:
+      type: object
+      properties:
+        to_backlog:
+          type: boolean
+          default: false
+        to:
+          type: string
+        from:
+          type: string
+
+    ReclaimResponse:
+      type: object
+      properties:
+        reclaimed:
+          type: integer
+        destination:
+          type: string
+
+    ProblemDetails:
+      type: object
+      description: RFC 7807 Problem Details
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string

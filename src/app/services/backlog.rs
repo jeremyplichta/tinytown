@@ -88,6 +88,9 @@ impl BacklogService {
     }
 
     /// Get the number of tasks in the backlog.
+    ///
+    /// Reserved for future use (e.g., backlog health checks, pagination).
+    #[allow(dead_code)]
     pub async fn len(channel: &Channel) -> Result<usize> {
         channel.backlog_len().await
     }
