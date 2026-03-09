@@ -108,6 +108,8 @@ See [tt plan](./cli/plan.md) for the full task DSL.
 - **[Installation](./getting-started/installation.md)** — Get Tinytown running in 30 seconds
 - **[Quick Start](./getting-started/quickstart.md)** — Your first multi-agent workflow
 - **[Core Concepts](./concepts/overview.md)** — Understand Towns, Agents, Tasks, Messages, and Channels
+- **[Townhall REST API](./advanced/townhall-rest.md)** — HTTP control plane for automation
+- **[Townhall MCP Server](./advanced/townhall-mcp.md)** — MCP tools/resources/prompts for LLM clients
 - **[Coming from Gastown?](./gastown/migration.md)** — Migration guide for Gastown users
 
 ## Named After

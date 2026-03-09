@@ -53,4 +53,6 @@
 
 - [Custom Models](./advanced/custom-models.md)
 - [Redis Configuration](./advanced/redis.md)
+- [Townhall REST API](./advanced/townhall-rest.md)
+- [Townhall MCP Server](./advanced/townhall-mcp.md)
 - [API Reference](./advanced/api.md)

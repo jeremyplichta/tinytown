@@ -16,7 +16,7 @@ info:
     url: https://github.com/redis-field-engineering/tinytown
 
 servers:
-  - url: http://localhost:8787
+  - url: http://localhost:8080
     description: Local development server
 
 tags:
@@ -145,6 +145,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AgentActionResponse'
+
+  /v1/agents/prune:
+    post:
+      tags: [Agents]
+      summary: Prune stopped/error agents from active roster
+      operationId: pruneAgents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PruneRequest'
+      responses:
+        '200':
+          description: Agents pruned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PruneResponse'
 
 
   /v1/tasks/assign:
