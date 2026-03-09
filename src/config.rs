@@ -170,7 +170,7 @@ pub enum Scope {
 impl Scope {
     /// Parse scope from string representation.
     #[must_use]
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "town.read" | "town:read" => Some(Scope::TownRead),
             "town.write" | "town:write" => Some(Scope::TownWrite),
@@ -227,15 +227,15 @@ impl TlsConfig {
             return Some("TLS enabled but key_file is not configured");
         }
         // Check files exist
-        if let Some(cert) = &self.cert_file {
-            if !std::path::Path::new(cert).exists() {
-                return Some("TLS cert_file does not exist");
-            }
+        if let Some(cert) = &self.cert_file
+            && !std::path::Path::new(cert).exists()
+        {
+            return Some("TLS cert_file does not exist");
         }
-        if let Some(key) = &self.key_file {
-            if !std::path::Path::new(key).exists() {
-                return Some("TLS key_file does not exist");
-            }
+        if let Some(key) = &self.key_file
+            && !std::path::Path::new(key).exists()
+        {
+            return Some("TLS key_file does not exist");
         }
         None
     }
@@ -266,10 +266,10 @@ impl MtlsConfig {
         if self.required && self.ca_file.is_none() {
             return Some("mTLS required but ca_file is not configured");
         }
-        if let Some(ca) = &self.ca_file {
-            if !std::path::Path::new(ca).exists() {
-                return Some("mTLS ca_file does not exist");
-            }
+        if let Some(ca) = &self.ca_file
+            && !std::path::Path::new(ca).exists()
+        {
+            return Some("mTLS ca_file does not exist");
         }
         None
     }

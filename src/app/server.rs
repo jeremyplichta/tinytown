@@ -147,9 +147,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .with_state(state.clone());
 
     // Combine public and authenticated routes
-    public_routes
-        .merge(authenticated_routes)
-        .with_state(state)
+    public_routes.merge(authenticated_routes).with_state(state)
 }
 
 async fn health() -> impl IntoResponse {

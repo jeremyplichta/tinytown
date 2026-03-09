@@ -17,13 +17,7 @@
 //! - Never logs raw tokens, API keys, or authorization headers
 //! - All sensitive data is redacted before logging
 
-use axum::{
-    body::Body,
-    extract::Request,
-    http::Method,
-    middleware::Next,
-    response::Response,
-};
+use axum::{body::Body, extract::Request, http::Method, middleware::Next, response::Response};
 use serde::Serialize;
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -160,4 +154,3 @@ pub async fn audit_middleware(request: Request<Body>, next: Next) -> Response {
 
     response
 }
-

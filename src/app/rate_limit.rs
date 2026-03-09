@@ -154,12 +154,11 @@ fn get_rate_limit_key(request: &Request<Body>) -> String {
 
     // Fall back to IP address from X-Forwarded-For or connection
     // Note: In production, ensure your reverse proxy sets this correctly
-    if let Some(forwarded) = request.headers().get("x-forwarded-for") {
-        if let Ok(value) = forwarded.to_str() {
-            if let Some(ip) = value.split(',').next() {
-                return format!("ip:{}", ip.trim());
-            }
-        }
+    if let Some(forwarded) = request.headers().get("x-forwarded-for")
+        && let Ok(value) = forwarded.to_str()
+        && let Some(ip) = value.split(',').next()
+    {
+        return format!("ip:{}", ip.trim());
     }
 
     // Default fallback
@@ -229,4 +228,3 @@ mod tests {
         assert!(!limiter.check("test-key", false).await);
     }
 }
-

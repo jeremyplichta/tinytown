@@ -354,7 +354,6 @@ async fn test_services_send_message() -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-
 // ============================================================================
 // AUTHENTICATION TESTS (Issue #16)
 // ============================================================================
@@ -373,14 +372,18 @@ async fn test_auth_api_key_generation_and_verification() {
     // Verification should work
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
     let parsed_hash = PasswordHash::new(&hash).expect("valid hash");
-    assert!(Argon2::default()
-        .verify_password(raw_key.as_bytes(), &parsed_hash)
-        .is_ok());
+    assert!(
+        Argon2::default()
+            .verify_password(raw_key.as_bytes(), &parsed_hash)
+            .is_ok()
+    );
 
     // Wrong key should fail
-    assert!(Argon2::default()
-        .verify_password(b"wrong-key", &parsed_hash)
-        .is_err());
+    assert!(
+        Argon2::default()
+            .verify_password(b"wrong-key", &parsed_hash)
+            .is_err()
+    );
 }
 
 /// Test principal scope checking.
@@ -458,15 +461,15 @@ async fn test_protected_endpoints_require_auth() -> Result<(), Box<dyn std::erro
         api_key_hash: Some(hash),
         ..Default::default()
     });
-    let state = Arc::new(AppState {
-        town,
-        auth_config,
-    });
+    let state = Arc::new(AppState { town, auth_config });
     let app = create_router(state);
     let test_server = TestServer::new(app);
 
     // Request without auth should return 401
-    test_server.get("/v1/status").await.assert_status_unauthorized();
+    test_server
+        .get("/v1/status")
+        .await
+        .assert_status_unauthorized();
 
     // Request with wrong key should return 401
     test_server
@@ -478,7 +481,10 @@ async fn test_protected_endpoints_require_auth() -> Result<(), Box<dyn std::erro
     // Request with correct key should succeed
     test_server
         .get("/v1/status")
-        .add_header(axum_test::http::header::AUTHORIZATION, format!("Bearer {}", raw_key))
+        .add_header(
+            axum_test::http::header::AUTHORIZATION,
+            format!("Bearer {}", raw_key),
+        )
         .await
         .assert_status_ok();
 
@@ -504,10 +510,7 @@ async fn test_x_api_key_header_auth() -> Result<(), Box<dyn std::error::Error>> 
         api_key_hash: Some(hash),
         ..Default::default()
     });
-    let state = Arc::new(AppState {
-        town,
-        auth_config,
-    });
+    let state = Arc::new(AppState { town, auth_config });
     let app = create_router(state);
     let test_server = TestServer::new(app);
 
@@ -536,10 +539,7 @@ async fn test_auth_mode_none_allows_all() -> Result<(), Box<dyn std::error::Erro
 
     // auth.mode = none (default)
     let auth_config = Arc::new(AuthConfig::default());
-    let state = Arc::new(AppState {
-        town,
-        auth_config,
-    });
+    let state = Arc::new(AppState { town, auth_config });
     let app = create_router(state);
     let test_server = TestServer::new(app);
 

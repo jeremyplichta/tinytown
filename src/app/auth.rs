@@ -104,18 +104,17 @@ impl IntoResponse for AuthError {
 /// Supports both `Authorization: Bearer <key>` and `X-API-Key: <key>` headers.
 fn extract_api_key(headers: &HeaderMap) -> Option<String> {
     // Try Authorization header first (Bearer token)
-    if let Some(auth) = headers.get("authorization") {
-        if let Ok(auth_str) = auth.to_str() {
-            if let Some(key) = auth_str.strip_prefix("Bearer ") {
-                return Some(key.trim().to_string());
-            }
-        }
+    if let Some(auth) = headers.get("authorization")
+        && let Ok(auth_str) = auth.to_str()
+        && let Some(key) = auth_str.strip_prefix("Bearer ")
+    {
+        return Some(key.trim().to_string());
     }
     // Fall back to X-API-Key header
-    if let Some(key) = headers.get("x-api-key") {
-        if let Ok(key_str) = key.to_str() {
-            return Some(key_str.trim().to_string());
-        }
+    if let Some(key) = headers.get("x-api-key")
+        && let Ok(key_str) = key.to_str()
+    {
+        return Some(key_str.trim().to_string());
     }
     None
 }
@@ -143,7 +142,10 @@ pub async fn auth_middleware(
         AuthMode::None => Principal::local_admin(),
         AuthMode::ApiKey => {
             let key = extract_api_key(request.headers()).ok_or(AuthError::UNAUTHORIZED)?;
-            let hash = config.api_key_hash.as_ref().ok_or(AuthError::UNAUTHORIZED)?;
+            let hash = config
+                .api_key_hash
+                .as_ref()
+                .ok_or(AuthError::UNAUTHORIZED)?;
             if !verify_api_key(&key, hash) {
                 return Err(AuthError::INVALID_CREDENTIALS);
             }
@@ -177,7 +179,9 @@ pub async fn require_scope(
 /// Route scope constants for easy import.
 /// These directly re-export the Scope variants for cleaner route configuration.
 pub mod route_scopes {
-    pub use crate::config::Scope::{Admin as ADMIN_OPS, AgentManage as AGENT_MGMT, TownRead as READ_OPS, TownWrite as WRITE_OPS};
+    pub use crate::config::Scope::{
+        Admin as ADMIN_OPS, AgentManage as AGENT_MGMT, TownRead as READ_OPS, TownWrite as WRITE_OPS,
+    };
 }
 
 /// Generate an API key and its Argon2id hash.
@@ -187,7 +191,11 @@ pub fn generate_api_key() -> (String, String) {
     use argon2::{PasswordHasher, password_hash::SaltString};
 
     // Generate a random key using two UUIDs concatenated (64 hex chars)
-    let raw_key = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+    let raw_key = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
 
     // Generate salt from UUID bytes (provides 122 bits of randomness)
     let salt_uuid = uuid::Uuid::new_v4();
@@ -263,4 +271,3 @@ mod tests {
         assert!(admin.has_scope(Scope::AgentManage));
     }
 }
-
