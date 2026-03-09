@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/redis-field-engineering/tinytown/compare/v0.5.0...v0.6.0) (2026-03-09)
+
+
+### Features
+
+* **townhall:** add authentication, authorization, and audit logging ([#24](https://github.com/redis-field-engineering/tinytown/issues/24)) ([8150f14](https://github.com/redis-field-engineering/tinytown/commit/8150f144aa005645e2561fa43223a639100c6863))
+* **townhall:** Add MCP interface ([#17](https://github.com/redis-field-engineering/tinytown/issues/17)) ([#26](https://github.com/redis-field-engineering/tinytown/issues/26)) ([0e267fe](https://github.com/redis-field-engineering/tinytown/commit/0e267fe0ad5d7e0fbb28f53474842ba74c55190a))
+* **townhall:** Introduce townhall REST control plane daemon ([#20](https://github.com/redis-field-engineering/tinytown/issues/20)) ([c08dcc5](https://github.com/redis-field-engineering/tinytown/commit/c08dcc586a25a1f3527ab630df62b7ffba658c5e)), closes [#15](https://github.com/redis-field-engineering/tinytown/issues/15)
+
 ## [0.5.0](https://github.com/redis-field-engineering/tinytown/compare/v0.4.0...v0.5.0) (2026-03-08)
 
 
