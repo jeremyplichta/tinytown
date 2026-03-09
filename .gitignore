@@ -9,10 +9,12 @@
 *.swo
 
 # Tinytown runtime artifacts
-.tt
+/.tt/
+/agents/
+/logs/
+/tasks/
 *.rdb
 tinytown.json
-logs/
 .agent_*.md
 .conductor_context.md
 
