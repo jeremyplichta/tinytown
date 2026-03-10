@@ -34,6 +34,11 @@ tags:
     description: Inter-agent messaging
   - name: Recovery
     description: Recovery and reclaim operations
+  - name: Missions
+    description: |
+      Mission Mode operations for autonomous multi-issue execution.
+      Missions orchestrate multiple GitHub issues/docs into a dependency-aware
+      work graph with automatic PR/CI monitoring.
 
 paths:
   /healthz:
@@ -361,6 +366,344 @@ paths:
               schema:
                 $ref: '#/components/schemas/ReclaimResponse'
 
+  # ==================== Mission Mode Endpoints ====================
+
+  /v1/missions:
+    get:
+      tags: [Missions]
+      summary: List all missions
+      operationId: listMissions
+      parameters:
+        - name: active_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+          description: Only return active missions (planning, running, blocked)
+      responses:
+        '200':
+          description: List of missions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionList'
+    post:
+      tags: [Missions]
+      summary: Start a new mission
+      description: |
+        Create and start a new mission with the given objectives.
+        Objectives can be GitHub issues or local document paths.
+      operationId: startMission
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartMissionRequest'
+      responses:
+        '201':
+          description: Mission created and started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartMissionResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}:
+    get:
+      tags: [Missions]
+      summary: Get mission status
+      description: |
+        Get detailed status of a mission including work items and watches.
+      operationId: getMissionStatus
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - name: include_work
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include work item details
+        - name: include_watches
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include watch item details
+        - name: include_events
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Include recent activity events
+      responses:
+        '200':
+          description: Mission status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionStatus'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      tags: [Missions]
+      summary: Delete a mission
+      description: |
+        Delete a mission and all associated data (work items, watches, events).
+        Only allowed for completed or failed missions unless force=true.
+      operationId: deleteMission
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - name: force
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: Force delete even if mission is active
+      responses:
+        '200':
+          description: Mission deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteMissionResponse'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Mission is still active
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/resume:
+    post:
+      tags: [Missions]
+      summary: Resume a stopped or blocked mission
+      operationId: resumeMission
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+      responses:
+        '200':
+          description: Mission resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionActionResponse'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Mission cannot be resumed (e.g., already running)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/stop:
+    post:
+      tags: [Missions]
+      summary: Stop an active mission
+      operationId: stopMission
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StopMissionRequest'
+      responses:
+        '200':
+          description: Mission stopped
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionActionResponse'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/work:
+    get:
+      tags: [Missions]
+      summary: List work items for a mission
+      operationId: listWorkItems
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, ready, assigned, running, blocked, done]
+          description: Filter by work item status
+      responses:
+        '200':
+          description: List of work items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemList'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/work/{work_item_id}:
+    get:
+      tags: [Missions]
+      summary: Get a specific work item
+      operationId: getWorkItem
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - $ref: '#/components/parameters/WorkItemId'
+      responses:
+        '200':
+          description: Work item details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      tags: [Missions]
+      summary: Update a work item
+      description: |
+        Update work item status or add artifacts. Used by agents to report
+        progress and completion.
+      operationId: updateWorkItem
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - $ref: '#/components/parameters/WorkItemId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkItemRequest'
+      responses:
+        '200':
+          description: Work item updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '404':
+          description: Work item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/watches:
+    get:
+      tags: [Missions]
+      summary: List watch items for a mission
+      operationId: listWatchItems
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, snoozed, done]
+          description: Filter by watch status
+      responses:
+        '200':
+          description: List of watch items
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchItemList'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/watches/{watch_id}/snooze:
+    post:
+      tags: [Missions]
+      summary: Snooze a watch item
+      description: Temporarily pause monitoring for the specified duration.
+      operationId: snoozeWatch
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - $ref: '#/components/parameters/WatchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SnoozeWatchRequest'
+      responses:
+        '200':
+          description: Watch snoozed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WatchItem'
+        '404':
+          description: Watch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /v1/missions/{mission_id}/events:
+    get:
+      tags: [Missions]
+      summary: Get mission activity events
+      operationId: getMissionEvents
+      parameters:
+        - $ref: '#/components/parameters/MissionId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Maximum number of events to return
+      responses:
+        '200':
+          description: Mission events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissionEventList'
+        '404':
+          description: Mission not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
 components:
   parameters:
     AgentName:
@@ -378,6 +721,30 @@ components:
         type: string
         format: uuid
       description: Task UUID
+    MissionId:
+      name: mission_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Mission UUID
+    WorkItemId:
+      name: work_item_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Work item UUID
+    WatchId:
+      name: watch_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: Watch item UUID
 
   schemas:
     TownInfo:
@@ -692,3 +1059,417 @@ components:
           type: integer
         detail:
           type: string
+
+    # ==================== Mission Mode Schemas ====================
+
+    MissionState:
+      type: string
+      enum: [planning, running, blocked, completed, failed]
+      description: |
+        Mission execution state:
+        - planning: Compiling work graph from objectives
+        - running: Active execution
+        - blocked: Waiting on external event
+        - completed: All objectives completed
+        - failed: Unrecoverable error
+
+    WorkKind:
+      type: string
+      enum: [design, implement, test, review, merge_gate, followup]
+      description: |
+        Type of work item:
+        - design: Design/planning work
+        - implement: Implementation work
+        - test: Testing work
+        - review: Code review
+        - merge_gate: Waiting for approval
+        - followup: Bug fixes, improvements
+
+    WorkStatus:
+      type: string
+      enum: [pending, ready, assigned, running, blocked, done]
+      description: |
+        Work item execution status:
+        - pending: Dependencies not satisfied
+        - ready: Can be assigned (dependencies done)
+        - assigned: Agent selected, not yet started
+        - running: In progress
+        - blocked: Waiting on fix/external
+        - done: Completed successfully
+
+    WatchKind:
+      type: string
+      enum: [pr_checks, bugbot_comments, review_comments, mergeability]
+      description: |
+        Type of watch item:
+        - pr_checks: Monitor PR CI checks
+        - bugbot_comments: Monitor Bugbot comments
+        - review_comments: Monitor review comments
+        - mergeability: Monitor PR mergeability
+
+    WatchStatus:
+      type: string
+      enum: [active, snoozed, done]
+      description: |
+        Watch item status:
+        - active: Actively being monitored
+        - snoozed: Temporarily paused
+        - done: Monitoring complete
+
+    TriggerAction:
+      type: string
+      enum: [create_fix_task, notify_reviewer, advance_pipeline]
+      description: Action to take when watch triggers
+
+    ObjectiveRef:
+      type: object
+      description: Reference to an objective (issue or document)
+      oneOf:
+        - type: object
+          title: Issue
+          required: [type, owner, repo, number]
+          properties:
+            type:
+              type: string
+              const: issue
+            owner:
+              type: string
+              description: Repository owner
+            repo:
+              type: string
+              description: Repository name
+            number:
+              type: integer
+              description: Issue number
+        - type: object
+          title: Doc
+          required: [type, path]
+          properties:
+            type:
+              type: string
+              const: doc
+            path:
+              type: string
+              description: Path to document
+
+    MissionPolicy:
+      type: object
+      description: Execution policy for a mission
+      properties:
+        max_parallel_items:
+          type: integer
+          default: 2
+          description: Maximum parallel work items
+        reviewer_required:
+          type: boolean
+          default: true
+          description: Reviewer required for implement/test items
+        auto_merge:
+          type: boolean
+          default: false
+          description: Auto-merge PRs when approved
+        watch_interval_secs:
+          type: integer
+          default: 180
+          description: Watch interval in seconds
+
+
+    MissionSummary:
+      type: object
+      description: Summary of a mission for list views
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/MissionState'
+        objective_count:
+          type: integer
+          description: Number of objectives in the mission
+        work_item_count:
+          type: integer
+          description: Total work items
+        completed_count:
+          type: integer
+          description: Completed work items
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    MissionRun:
+      type: object
+      description: Full mission orchestration record
+      properties:
+        id:
+          type: string
+          format: uuid
+        objective_refs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObjectiveRef'
+        state:
+          $ref: '#/components/schemas/MissionState'
+        policy:
+          $ref: '#/components/schemas/MissionPolicy'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        next_wake_at:
+          type: string
+          format: date-time
+          nullable: true
+        blocked_reason:
+          type: string
+          nullable: true
+
+    WorkItem:
+      type: object
+      description: Individual work unit in the mission DAG
+      properties:
+        id:
+          type: string
+          format: uuid
+        mission_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        kind:
+          $ref: '#/components/schemas/WorkKind'
+        depends_on:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Work item IDs this depends on
+        owner_role:
+          type: string
+          nullable: true
+          description: Preferred agent role
+        status:
+          $ref: '#/components/schemas/WorkStatus'
+        assigned_to:
+          type: string
+          format: uuid
+          nullable: true
+          description: Assigned agent ID
+        artifact_refs:
+          type: array
+          items:
+            type: string
+          description: PR URLs, commit SHAs
+        source_ref:
+          type: string
+          nullable: true
+          description: Source objective reference
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    WatchItem:
+      type: object
+      description: PR/CI monitoring task
+      properties:
+        id:
+          type: string
+          format: uuid
+        mission_id:
+          type: string
+          format: uuid
+        work_item_id:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/WatchKind'
+        target_ref:
+          type: string
+          description: Target reference (PR URL, number)
+        interval_secs:
+          type: integer
+          description: Check interval in seconds
+        next_due_at:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/WatchStatus'
+        on_trigger:
+          $ref: '#/components/schemas/TriggerAction'
+        last_check_at:
+          type: string
+          format: date-time
+          nullable: true
+        consecutive_failures:
+          type: integer
+
+    # Mission Request/Response Schemas
+
+    MissionList:
+      type: object
+      properties:
+        missions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MissionSummary'
+        count:
+          type: integer
+
+    StartMissionRequest:
+      type: object
+      required: [objectives]
+      properties:
+        objectives:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ObjectiveRef'
+          description: Issues or documents to process
+        policy:
+          $ref: '#/components/schemas/MissionPolicy'
+
+    StartMissionResponse:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/MissionState'
+        objective_count:
+          type: integer
+
+    MissionStatus:
+      type: object
+      properties:
+        mission:
+          $ref: '#/components/schemas/MissionRun'
+        work_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+          description: Included if include_work=true
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchItem'
+          description: Included if include_watches=true
+        events:
+          type: array
+          items:
+            type: string
+          description: Included if include_events=true
+        summary:
+          type: object
+          properties:
+            total_work_items:
+              type: integer
+            pending:
+              type: integer
+            ready:
+              type: integer
+            running:
+              type: integer
+            done:
+              type: integer
+            blocked:
+              type: integer
+            active_watches:
+              type: integer
+
+    MissionActionResponse:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        previous_state:
+          $ref: '#/components/schemas/MissionState'
+        new_state:
+          $ref: '#/components/schemas/MissionState'
+
+    StopMissionRequest:
+      type: object
+      properties:
+        force:
+          type: boolean
+          default: false
+          description: Force stop without graceful cleanup
+
+    DeleteMissionResponse:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        deleted:
+          type: boolean
+
+    WorkItemList:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        work_items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+        count:
+          type: integer
+
+    UpdateWorkItemRequest:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/WorkStatus'
+        artifacts:
+          type: array
+          items:
+            type: string
+          description: Artifact references to add (PR URLs, commits)
+
+    WatchItemList:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        watches:
+          type: array
+          items:
+            $ref: '#/components/schemas/WatchItem'
+        count:
+          type: integer
+
+    SnoozeWatchRequest:
+      type: object
+      required: [duration_secs]
+      properties:
+        duration_secs:
+          type: integer
+          minimum: 60
+          description: Duration to snooze in seconds
+
+    MissionEventList:
+      type: object
+      properties:
+        mission_id:
+          type: string
+          format: uuid
+        events:
+          type: array
+          items:
+            type: string
+          description: Timestamped event messages
+        count:
+          type: integer

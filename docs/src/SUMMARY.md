@@ -17,6 +17,7 @@
 - [Messages](./concepts/messages.md)
 - [Channels](./concepts/channels.md)
 - [Coordination](./concepts/coordination.md)
+- [Mission Mode](./concepts/missions.md)
 
 # Tutorials
 
@@ -24,6 +25,7 @@
 - [Multi-Agent Coordination](./tutorials/multi-agent.md)
 - [Task Pipelines](./tutorials/pipelines.md)
 - [Error Handling & Recovery](./tutorials/recovery.md)
+- [Mission Mode](./tutorials/mission-mode.md)
 
 # CLI Reference
 
@@ -55,6 +57,7 @@
 - [tt towns](./cli/towns.md)
 - [tt auth](./cli/auth.md)
 - [tt migrate](./cli/migrate.md)
+- [tt mission](./cli/mission.md)
 
 # Coming from Gastown?
 

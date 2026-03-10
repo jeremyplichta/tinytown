@@ -69,6 +69,27 @@ That's it! Your agents are now coordinating via Redis.
 
 > **Note:** `tt bootstrap` delegates to an AI agent to download Redis from GitHub and compile it for your machine. Alternatively: `brew install redis` (macOS) or `apt install redis-server` (Ubuntu).
 
+## 🎯 Mission Mode
+
+Start an autonomous mission that handles multiple GitHub issues with dependency-aware scheduling:
+
+```bash
+# Start a mission spanning multiple issues
+tt mission start --issue 23 --issue 24 --issue 25
+
+# Check mission status and work items
+tt mission status --work
+
+# List all missions
+tt mission list
+```
+
+Mission mode provides:
+- **Durable scheduling** — State persisted in Redis, survives restarts
+- **Dependency tracking** — Work items execute in DAG order
+- **PR/CI monitoring** — Automatic watch loops for CI status, Bugbot, reviews
+- **Agent routing** — Work assigned to best-fit agents by role
+
 ## 🌐 Programmatic Interfaces
 
 Tinytown also ships a `townhall` control plane binary with both REST and MCP interfaces.
@@ -88,7 +109,7 @@ REST OpenAPI spec: `docs/openapi/townhall-v1.yaml`
 
 ## 🏗️ Architecture
 
-Tinytown is built on **6 core concepts**:
+Tinytown is built on **7 core concepts**:
 
 | Concept | Purpose |
 |---------|---------|
@@ -98,6 +119,7 @@ Tinytown is built on **6 core concepts**:
 | **Task** 📋 | Units of work with state tracking |
 | **Message** 💬 | Inter-agent communication with priorities |
 | **Channel** 📡 | Redis-based message passing (<1ms latency) |
+| **Mission** 🎯 | Autonomous multi-issue execution with durable scheduling |
 
 ```
         ┌─────────────────┐
