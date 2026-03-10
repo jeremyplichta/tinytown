@@ -1704,29 +1704,20 @@ async fn main() -> Result<()> {
         }
 
         Commands::Prune { all } => {
-            use tinytown::AgentState;
-
             let town = Town::connect(&cli.town).await?;
-            let agents = town.list_agents().await;
+            let removed = tinytown::AgentService::prune(&town, all).await?;
 
-            let mut removed = 0;
-            for agent in agents {
-                let should_remove =
-                    all || matches!(agent.state, AgentState::Stopped | AgentState::Error);
-                if should_remove {
-                    town.channel().delete_agent(agent.id).await?;
-                    info!(
-                        "🗑️  Removed {} ({}) - {:?}",
-                        agent.name, agent.id, agent.state
-                    );
-                    removed += 1;
-                }
+            for agent in &removed {
+                info!(
+                    "🗑️  Removed {} ({}) - {:?}",
+                    agent.name, agent.id, agent.state
+                );
             }
 
-            if removed == 0 {
+            if removed.is_empty() {
                 info!("No agents to prune.");
             } else {
-                info!("✨ Pruned {} agent(s)", removed);
+                info!("✨ Pruned {} agent(s)", removed.len());
             }
         }
 

@@ -306,7 +306,7 @@ paths:
     get:
       tags: [Messages]
       summary: Get agent inbox
-      operationId: getInbox
+      operationId: getInboxGet
       parameters:
         - $ref: '#/components/parameters/AgentName'
       responses:
@@ -319,7 +319,7 @@ paths:
     post:
       tags: [Messages]
       summary: Get agent inbox
-      operationId: getInbox
+      operationId: getInboxPost
       parameters:
         - $ref: '#/components/parameters/AgentName'
       responses:
