@@ -10,7 +10,7 @@ tt task <SUBCOMMAND> [OPTIONS]
 
 ## Description
 
-Provides operations for managing specific tasks by ID: completing, viewing details, or listing tasks.
+Provides operations for managing specific tasks by ID: resolving the current tracked assignment, completing work, viewing details, or listing tasks.
 
 ## Subcommands
 
@@ -21,6 +21,16 @@ Mark a task as completed:
 ```bash
 tt task complete <TASK_ID> [--result <MESSAGE>]
 ```
+
+### Current
+
+Show the currently tracked task for an agent:
+
+```bash
+tt task current [AGENT]
+```
+
+If you run this inside a Tinytown agent loop, `AGENT` is optional and Tinytown resolves the current worker automatically. This is the safest way for a worker to confirm the real Tinytown task ID before running `tt task complete ...`, especially when the task description itself contains other UUID-like values such as mission IDs.
 
 ### Show
 
@@ -60,6 +70,20 @@ Output:
 ✅ Task 550e8400-e29b-41d4-a716-446655440000 marked as completed
    Description: Fix authentication bug
    Result: Fixed the bug
+```
+
+### Show the Current Tracked Task
+
+```bash
+tt task current frontend
+```
+
+Output:
+```
+📋 Current task for 'frontend': 550e8400-e29b-41d4-a716-446655440000
+   Description: Mission c7d2e4dd-30e5-48e5-8bfc-95d5f14b13bf: implement issue #5
+   State: Assigned
+   Complete with: tt task complete 550e8400-e29b-41d4-a716-446655440000 --result "what was done"
 ```
 
 ### View Task Details
@@ -112,4 +136,3 @@ State icons:
 - [tt tasks](./tasks.md) — Overview of pending tasks
 - [tt assign](./assign.md) — Assign new tasks
 - [tt backlog](./backlog.md) — Manage unassigned tasks
-

@@ -13,6 +13,9 @@ use tracing_subscriber::EnvFilter;
 
 use tinytown::{GlobalConfig, Result, Task, Town, plan};
 
+const TT_AGENT_ID_ENV: &str = "TINYTOWN_AGENT_ID";
+const TT_AGENT_NAME_ENV: &str = "TINYTOWN_AGENT_NAME";
+
 /// Build a shell command to run an agent CLI with a prompt/instruction file.
 /// Different CLIs have different ways to accept input:
 /// - auggie: uses --instruction-file flag
@@ -25,6 +28,102 @@ fn build_cli_command(cli_name: &str, cli_cmd: &str, prompt_file: &std::path::Pat
         // Other CLIs accept input via stdin
         format!("cat '{}' | {}", prompt_file.display(), cli_cmd)
     }
+}
+
+async fn resolve_agent_id_for_current_task(
+    town: &Town,
+    agent: Option<&str>,
+) -> Result<tinytown::AgentId> {
+    if let Some(agent_ref) = agent {
+        if let Ok(agent_id) = agent_ref.parse::<tinytown::AgentId>()
+            && town.channel().get_agent_state(agent_id).await?.is_some()
+        {
+            return Ok(agent_id);
+        }
+
+        return Ok(town.agent(agent_ref).await?.id());
+    }
+
+    if let Ok(agent_id) = std::env::var(TT_AGENT_ID_ENV)
+        && let Ok(parsed_id) = agent_id.parse::<tinytown::AgentId>()
+        && town.channel().get_agent_state(parsed_id).await?.is_some()
+    {
+        return Ok(parsed_id);
+    }
+
+    if let Ok(agent_name) = std::env::var(TT_AGENT_NAME_ENV) {
+        return Ok(town.agent(&agent_name).await?.id());
+    }
+
+    Err(tinytown::Error::AgentNotFound(
+        "No current agent context found. Pass an agent name/id or run this from an agent loop."
+            .to_string(),
+    ))
+}
+
+async fn track_current_task_for_round(
+    channel: &tinytown::Channel,
+    agent_id: tinytown::AgentId,
+    actionable_messages: &[(tinytown::Message, bool)],
+) -> Result<()> {
+    let task_ids: Vec<_> = actionable_messages
+        .iter()
+        .filter_map(|(msg, _)| match &msg.msg_type {
+            tinytown::MessageType::TaskAssign { task_id } => task_id.parse().ok(),
+            _ => None,
+        })
+        .collect();
+
+    if task_ids.len() != 1 {
+        return Ok(());
+    }
+
+    tinytown::TaskService::set_current_for_agent(channel, agent_id, task_ids[0]).await
+}
+
+async fn format_actionable_section(
+    channel: &tinytown::Channel,
+    actionable_messages: &[(tinytown::Message, bool)],
+) -> String {
+    let mut section = String::from("## Actionable Messages (already popped)\n\n");
+
+    for (idx, (msg, urgent)) in actionable_messages.iter().enumerate() {
+        let priority = if *urgent { "URGENT" } else { "normal" };
+        match &msg.msg_type {
+            tinytown::MessageType::TaskAssign { task_id } => {
+                let description = if let Ok(tid) = task_id.parse::<tinytown::TaskId>() {
+                    match channel.get_task(tid).await {
+                        Ok(Some(task)) => truncate_summary(&task.description, 160),
+                        _ => "Task details unavailable".to_string(),
+                    }
+                } else {
+                    "Task details unavailable".to_string()
+                };
+                section.push_str(&format!(
+                    "{}. [{}] task assignment from {}\n   Task ID: {}\n   Description: {}\n   Complete with: tt task complete {} --result \"what was done\"\n   Ignore any mission/work-item UUIDs in the description; the Task ID above is the real Tinytown task id.\n",
+                    idx + 1,
+                    priority,
+                    msg.from,
+                    task_id,
+                    description,
+                    task_id
+                ));
+            }
+            _ => {
+                let summary =
+                    truncate_summary(&describe_message(channel, &msg.msg_type).await, 120);
+                section.push_str(&format!(
+                    "{}. [{}] from {}: {}\n",
+                    idx + 1,
+                    priority,
+                    msg.from,
+                    summary
+                ));
+            }
+        }
+    }
+
+    section
 }
 
 #[derive(Parser)]
@@ -408,6 +507,12 @@ enum TaskAction {
     Show {
         /// Task ID to show
         task_id: String,
+    },
+
+    /// Show the tracked current task for an agent
+    Current {
+        /// Agent name or ID (optional inside an agent loop)
+        agent: Option<String>,
     },
 
     /// List all tasks
@@ -1810,12 +1915,11 @@ async fn main() -> Result<()> {
                         tinytown::Error::TaskNotFound(format!("Invalid task ID: {}", e))
                     })?;
 
-                    // Get the task
-                    if let Some(mut task) = town.channel().get_task(tid).await? {
-                        // Mark as completed
-                        let result_msg = result.unwrap_or_else(|| "Completed".to_string());
-                        task.complete(&result_msg);
-                        town.channel().set_task(&task).await?;
+                    if let Some(completed) =
+                        tinytown::TaskService::complete(town.channel(), tid, result).await?
+                    {
+                        let task = completed.task;
+                        let result_msg = completed.result;
 
                         if let Some((mission_id, work_item_id)) = mission_task_binding(&task.tags) {
                             use tinytown::mission::{MissionScheduler, MissionStorage};
@@ -1870,6 +1974,12 @@ async fn main() -> Result<()> {
                             truncate_summary(&task.description, 60)
                         );
                         info!("   Result: {}", truncate_summary(&result_msg, 60));
+                        if completed.cleared_current_task {
+                            info!("   Cleared current assignment pointer for agent");
+                        }
+                        if let Some(tasks_completed) = completed.tasks_completed {
+                            info!("   Agent tasks completed: {}", tasks_completed);
+                        }
                     } else {
                         info!("❌ Task {} not found", task_id);
                     }
@@ -1913,6 +2023,34 @@ async fn main() -> Result<()> {
                         }
                     } else {
                         info!("❌ Task {} not found", task_id);
+                    }
+                }
+
+                TaskAction::Current { agent } => {
+                    let agent_id =
+                        resolve_agent_id_for_current_task(&town, agent.as_deref()).await?;
+                    let agents = town.list_agents().await;
+                    let agent_name = agents
+                        .iter()
+                        .find(|candidate| candidate.id == agent_id)
+                        .map(|candidate| candidate.name.clone())
+                        .unwrap_or_else(|| agent_id.to_string());
+
+                    if let Some(task) =
+                        tinytown::TaskService::current_for_agent(town.channel(), agent_id).await?
+                    {
+                        info!("📋 Current task for '{}': {}", agent_name, task.id);
+                        info!("   Description: {}", task.description);
+                        info!("   State: {:?}", task.state);
+                        info!(
+                            "   Complete with: tt task complete {} --result \"what was done\"",
+                            task.id
+                        );
+                        if !task.tags.is_empty() {
+                            info!("   Tags: {}", task.tags.join(", "));
+                        }
+                    } else {
+                        info!("📭 No current task tracked for '{}'", agent_name);
                     }
                 }
 
@@ -2418,22 +2556,9 @@ async fn main() -> Result<()> {
                     .iter()
                     .filter(|(_, urgent)| *urgent)
                     .count();
-                let actionable_section = {
-                    let mut section = String::from("## Actionable Messages (already popped)\n\n");
-                    for (idx, (msg, urgent)) in actionable_messages.iter().enumerate() {
-                        let summary =
-                            truncate_summary(&describe_message(channel, &msg.msg_type).await, 120);
-                        let priority = if *urgent { "URGENT" } else { "normal" };
-                        section.push_str(&format!(
-                            "{}. [{}] from {}: {}\n",
-                            idx + 1,
-                            priority,
-                            msg.from,
-                            summary
-                        ));
-                    }
-                    section
-                };
+                track_current_task_for_round(channel, agent_id, &actionable_messages).await?;
+                let actionable_section =
+                    format_actionable_section(channel, &actionable_messages).await;
 
                 let informational_section = if informational_summaries.is_empty() {
                     String::new()
@@ -2521,6 +2646,7 @@ tt send <agent> --query "question"     # Ask for a response
 tt send <agent> --info "update"        # Send FYI update
 tt send <agent> --ack "received"       # Send acknowledgment
 tt send <agent> --urgent --query "..." # Priority message for next round
+tt task current                        # Show your tracked current assignment
 tt task complete <task_id> --result "summary"  # Mark a task as done
 ```
 
@@ -2539,8 +2665,9 @@ tt task complete <task_id> --result "summary"  # Mark a task as done
 3. Claim only work that matches your role hint; do not claim unrelated tasks.
 4. Delegate or ask questions using semantic message types (`--query`, `--info`, `--ack`).
 5. If blocked, send a query with specific unblock needs.
-6. When finished with a task, mark it complete: `tt task complete <task_id> --result "what was done"`
-7. Send informational updates or confirmations as appropriate.
+6. Use `tt task current` to confirm the real Tinytown task id before completing work; never use mission/work-item UUIDs from the description as the task id.
+7. When finished with a task, mark it complete: `tt task complete <task_id> --result "what was done"`
+8. Send informational updates or confirmations as appropriate.
 
 Only run commands needed to complete listed work; inbox messages for this round are already provided above.
 "#,
@@ -2581,6 +2708,8 @@ Only run commands needed to complete listed work; inbox messages for this round 
                     .arg("-c")
                     .arg(&shell_cmd)
                     .current_dir(&cli.town)
+                    .env(TT_AGENT_ID_ENV, agent_id.to_string())
+                    .env(TT_AGENT_NAME_ENV, &name)
                     .stdin(std::process::Stdio::null())
                     .stdout(output.try_clone()?)
                     .stderr(output)

@@ -447,20 +447,15 @@ pub fn task_complete_tool(state: Arc<McpState>) -> Tool {
                     }
                 };
                 let channel = state.town.channel();
-                match channel.get_task(task_id).await {
-                    Ok(Some(mut task)) => {
-                        let result_msg = input.result.unwrap_or_else(|| "Completed".to_string());
-                        task.complete(&result_msg);
-                        match channel.set_task(&task).await {
-                            Ok(()) => Ok(json_result(serde_json::json!({
-                                "task_id": task_id.to_string(),
-                                "description": task.description,
-                                "result": result_msg,
-                                "status": "completed"
-                            }))),
-                            Err(e) => Ok(error_response(e.to_string())),
-                        }
-                    }
+                match crate::TaskService::complete(channel, task_id, input.result).await {
+                    Ok(Some(completed)) => Ok(json_result(serde_json::json!({
+                        "task_id": task_id.to_string(),
+                        "description": completed.task.description,
+                        "result": completed.result,
+                        "status": "completed",
+                        "cleared_current_task": completed.cleared_current_task,
+                        "tasks_completed": completed.tasks_completed
+                    }))),
                     Ok(None) => Ok(error_response(format!("Task {} not found", task_id))),
                     Err(e) => Ok(error_response(e.to_string())),
                 }

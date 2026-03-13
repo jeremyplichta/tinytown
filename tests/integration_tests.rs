@@ -15,7 +15,8 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tinytown::message::MessageType;
 use tinytown::{
-    Agent, AgentId, AgentState, AgentType, Message, Priority, Task, TaskId, TaskState, Town,
+    Agent, AgentId, AgentState, AgentType, Message, Priority, Task, TaskId, TaskService, TaskState,
+    Town,
 };
 
 /// Wrapper that holds both Town and TempDir, cleaning up Redis on drop
@@ -454,6 +455,90 @@ async fn test_task_persistence() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(retrieved_task.description, "Persistent task");
     assert_eq!(retrieved_task.state, TaskState::Assigned);
     assert_eq!(retrieved_task.assigned_to, Some(agent_id));
+
+    Ok(())
+}
+
+/// Test that the tracked current task resolves the persisted Tinytown task ID,
+/// even when the task description contains another UUID-like value.
+#[tokio::test]
+async fn test_current_task_resolves_real_task_id_over_description_uuid()
+-> Result<(), Box<dyn std::error::Error>> {
+    let town = create_test_town("current-task-real-id-test").await?;
+    let agent = town.spawn_agent("frontend", "claude").await?;
+
+    let mission_uuid = "c7d2e4dd-30e5-48e5-8bfc-95d5f14b13bf";
+    let mut task = Task::new(format!(
+        "Mission {}: implement GitHub issue #5 and keep the UI stable",
+        mission_uuid
+    ));
+    task.assign(agent.id());
+
+    let task_id = agent.assign(task).await?;
+    assert_ne!(task_id.to_string(), mission_uuid);
+
+    TaskService::set_current_for_agent(town.channel(), agent.id(), task_id).await?;
+
+    let current = TaskService::current_for_agent(town.channel(), agent.id())
+        .await?
+        .expect("tracked current task");
+
+    assert_eq!(current.id, task_id);
+    assert!(current.description.contains(mission_uuid));
+    assert_eq!(current.assigned_to, Some(agent.id()));
+    assert_eq!(current.state, TaskState::Assigned);
+
+    Ok(())
+}
+
+/// Test that completing the tracked current task clears the pointer and increments agent stats.
+#[tokio::test]
+async fn test_complete_clears_current_task_and_increments_agent_stats()
+-> Result<(), Box<dyn std::error::Error>> {
+    let town = create_test_town("current-task-complete-test").await?;
+    let agent = town.spawn_agent("backend", "claude").await?;
+
+    let mut task = Task::new("Implement API endpoint");
+    task.assign(agent.id());
+    let task_id = agent.assign(task).await?;
+
+    TaskService::set_current_for_agent(town.channel(), agent.id(), task_id).await?;
+
+    let completion = TaskService::complete(
+        town.channel(),
+        task_id,
+        Some("Implemented API endpoint".to_string()),
+    )
+    .await?
+    .expect("completed task");
+
+    assert_eq!(completion.task.id, task_id);
+    assert_eq!(completion.task.state, TaskState::Completed);
+    assert_eq!(completion.result, "Implemented API endpoint");
+    assert!(completion.cleared_current_task);
+    assert_eq!(completion.tasks_completed, Some(1));
+
+    let agent_state = town
+        .channel()
+        .get_agent_state(agent.id())
+        .await?
+        .expect("agent state");
+    assert_eq!(agent_state.current_task, None);
+    assert_eq!(agent_state.tasks_completed, 1);
+
+    let current = TaskService::current_for_agent(town.channel(), agent.id()).await?;
+    assert!(current.is_none());
+
+    let stored_task = town
+        .channel()
+        .get_task(task_id)
+        .await?
+        .expect("stored completed task");
+    assert_eq!(stored_task.state, TaskState::Completed);
+    assert_eq!(
+        stored_task.result,
+        Some("Implemented API endpoint".to_string())
+    );
 
     Ok(())
 }
