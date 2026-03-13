@@ -29,6 +29,7 @@ use crate::mission::storage::MissionStorage;
 use crate::mission::types::{
     MissionId, MissionRun, MissionState, WorkItem, WorkItemId, WorkKind, WorkStatus,
 };
+use crate::task::Task;
 
 // ==================== Configuration ====================
 
@@ -87,6 +88,19 @@ pub struct SchedulerTickResult {
     pub total_assigned: usize,
     /// Number of missions now completed
     pub missions_completed: usize,
+}
+
+/// Outcome of attempting to complete a work item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkItemCompletion {
+    /// Work item completion was persisted successfully.
+    Completed,
+    /// Mission record was not found.
+    MissionNotFound,
+    /// Work item record was not found.
+    WorkItemNotFound,
+    /// Reviewer approval is still required before completion can proceed.
+    ReviewerApprovalRequired,
 }
 
 // ==================== Agent Match Score ====================
@@ -376,16 +390,28 @@ impl MissionScheduler {
                 item.assign(agent.id);
                 self.storage.save_work_item(item).await?;
 
-                // Send task message to agent
+                let mut task = Task::new(format!(
+                    "[Mission Work Item] {}\n\nMission: {}\nWork item: {}\nSource: {}",
+                    item.title,
+                    mission.id,
+                    item.id,
+                    item.source_ref.as_deref().unwrap_or("unknown")
+                ))
+                .with_tags([
+                    "mission-work-item".to_string(),
+                    format!("mission:{}", mission.id),
+                    format!("work-item:{}", item.id),
+                ]);
+                task.assign(agent.id);
+                let task_id = task.id;
+                self.channel.set_task(&task).await?;
+
+                // Send persisted task assignment to agent
                 let msg = Message::new(
                     AgentId::supervisor(),
                     agent.id,
-                    MessageType::Task {
-                        description: format!(
-                            "[Mission Work Item] {}\n\nSource: {:?}",
-                            item.title,
-                            item.source_ref.as_deref().unwrap_or("unknown")
-                        ),
+                    MessageType::TaskAssign {
+                        task_id: task_id.to_string(),
                     },
                 );
                 self.channel.send(&msg).await?;
@@ -394,7 +420,10 @@ impl MissionScheduler {
                 self.storage
                     .log_event(
                         mission.id,
-                        &format!("Assigned '{}' to agent '{}'", item.title, agent.name),
+                        &format!(
+                            "Assigned '{}' to agent '{}' as task {}",
+                            item.title, agent.name, task_id
+                        ),
                     )
                     .await?;
 
@@ -538,7 +567,7 @@ impl MissionScheduler {
 
     /// Mark a work item as complete, respecting reviewer gates.
     ///
-    /// Returns true if the item was marked complete, false if blocked by reviewer gate.
+    /// Returns the specific completion outcome.
     #[instrument(skip(self, artifacts))]
     pub async fn complete_work_item(
         &self,
@@ -546,15 +575,15 @@ impl MissionScheduler {
         work_item_id: WorkItemId,
         artifacts: Vec<String>,
         reviewer_approved: bool,
-    ) -> Result<bool> {
+    ) -> Result<WorkItemCompletion> {
         let Some(mission) = self.storage.get_mission(mission_id).await? else {
             warn!("Mission {} not found", mission_id);
-            return Ok(false);
+            return Ok(WorkItemCompletion::MissionNotFound);
         };
 
         let Some(mut item) = self.storage.get_work_item(mission_id, work_item_id).await? else {
             warn!("Work item {} not found", work_item_id);
-            return Ok(false);
+            return Ok(WorkItemCompletion::WorkItemNotFound);
         };
 
         // Check reviewer gate
@@ -569,7 +598,7 @@ impl MissionScheduler {
                     &format!("Work item '{}' awaiting reviewer approval", item.title),
                 )
                 .await?;
-            return Ok(false);
+            return Ok(WorkItemCompletion::ReviewerApprovalRequired);
         }
 
         // Mark complete
@@ -581,7 +610,7 @@ impl MissionScheduler {
             .await?;
 
         info!("Completed work item '{}'", item.title);
-        Ok(true)
+        Ok(WorkItemCompletion::Completed)
     }
 
     /// Mark a work item as blocked.
