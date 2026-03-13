@@ -2780,11 +2780,12 @@ tt task complete <task_id> --result "summary"  # Mark a task as done
 1. Handle all actionable messages listed above.
 2. If you have no direct assignment or extra capacity, review backlog and claim one role-matching task.
 3. Claim only work that matches your role hint; do not claim unrelated tasks.
-4. Delegate or ask questions using semantic message types (`--query`, `--info`, `--ack`).
-5. If blocked, send a query with specific unblock needs.
-6. Use `tt task current` to confirm the real Tinytown task id before completing work; never use mission/work-item UUIDs from the description as the task id.
-7. When finished with a task, mark it complete: `tt task complete <task_id> --result "what was done"`
-8. Send informational updates or confirmations as appropriate.
+4. Prefer direct agent-to-agent messages for concrete execution handoffs, review requests, and unblock checks.
+5. Use `supervisor` / `conductor` when you need human guidance, priority changes, broader sequencing, escalation, or town-wide visibility.
+6. If blocked, send a query with specific unblock needs.
+7. Use `tt task current` to confirm the real Tinytown task id before completing work; never use mission/work-item UUIDs from the description as the task id.
+8. When finished with a task, mark it complete: `tt task complete <task_id> --result "what was done"`
+9. Send informational updates or confirmations as appropriate, including FYI summaries to supervisor/conductor when the conductor should stay informed.
 
 Only run commands needed to complete listed work; inbox messages for this round are already provided above.
 "#,
@@ -3069,19 +3070,20 @@ tt save                     # Save Redis AOF snapshot (for version control)
 4. **Assign** tasks to agents with clear, actionable descriptions
 5. **Use backlog** for unassigned work and role-based claiming
 6. **Monitor** progress with `tt status --deep` (shows rounds, uptime, activity)
-7. **Coordinate** handoffs between agents
-8. **Check with reviewer** to decide when work is complete
+7. **Coordinate** handoffs between agents without becoming the bottleneck
+8. **Use reviewer outcomes** to decide when work is complete
 9. **Cleanup**: When done, stop agents with `tt kill <agent>`
 
 ## The Reviewer Pattern
 
-Always spawn a **reviewer** agent. This agent decides when work is satisfactorily done:
+Always spawn a **reviewer** agent. This agent decides when work is satisfactorily done, but the next execution step should usually flow directly to the owning worker:
 
-1. Worker completes task → you assign review task to reviewer
-2. Reviewer checks the work → reports back (approve/needs changes)
-3. You either mark complete or assign fixes to worker
+1. Worker completes task → worker or conductor routes review to reviewer
+2. Reviewer checks the work → approves or sends concrete fixes directly to the owning worker
+3. Reviewer or worker sends `--info` to supervisor/conductor when visibility matters
+4. You step in for human decisions, priority changes, cross-team sequencing, or escalation
 
-This keeps decisions simple: workers work, reviewer approves, you coordinate.
+This keeps execution flowing: agents hand off obvious next steps directly, reviewer remains the quality gate, and you stay focused on higher-level orchestration.
 
 ## Guidelines
 
@@ -3089,6 +3091,8 @@ This keeps decisions simple: workers work, reviewer approves, you coordinate.
 - Be proactive: spawn agents and assign tasks without waiting to be told exactly how
 - Be specific: task descriptions should be clear and actionable
 - Be efficient: parallelize independent work across multiple agents
+- Prefer direct worker/reviewer/worker coordination when the next handoff is obvious
+- Keep the conductor in the loop with `tt send supervisor --info ...` when humans need visibility without blocking execution
 - Check `tt status` frequently to monitor progress
 - Keep backlog flowing: if an agent goes idle, have it review backlog and claim role-matching work
 - **Save state to git**: Run `tt sync pull` periodically to save task state to tasks.toml, then suggest committing it
@@ -3104,10 +3108,11 @@ You:
 4. `tt assign backend "Implement REST API for user auth: POST /signup, POST /login, POST /logout, POST /reset-password. Use bcrypt for passwords."`
 5. `tt assign tester "Write integration tests for auth API: test signup, login, logout, password reset. Cover success and error cases."`
 6. Monitor with `tt status`
-7. When backend is done: `tt assign reviewer "Review the auth API implementation. Check: security (password hashing, no secrets in logs), error handling, API consistency. Approve or list changes needed."`
-8. If reviewer approves → done! If not → assign fixes to backend, repeat.
-9. Save state: `tt sync pull` to save tasks to tasks.toml
-10. Suggest: "Run `git add tasks.toml && git commit -m 'Update task state'` to persist"
+7. When backend is ready: backend or conductor notifies reviewer directly with `tt send reviewer --info "Auth API implementation complete. Review src/auth.rs and route fixes back to backend if needed."`
+8. If reviewer finds concrete issues → reviewer sends them directly to backend and copies supervisor/conductor with `--info`
+9. If reviewer approves → done! If broader coordination is needed → you step in and reassign or reprioritize.
+10. Save state: `tt sync pull` to save tasks to tasks.toml
+11. Suggest: "Run `git add tasks.toml && git commit -m 'Update task state'` to persist"
 
 Now, help the user orchestrate their project!
 "#,

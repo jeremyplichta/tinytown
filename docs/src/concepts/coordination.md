@@ -6,10 +6,10 @@ How agents work together and decide when tasks are complete.
 
 Tinytown keeps coordination simple:
 
-1. **Conductor** orchestrates (spawns agents, assigns tasks)
-2. **Workers** do the work
-3. **Reviewer** decides when work is done
-4. **Conductor** monitors and coordinates handoffs
+1. **Conductor** orchestrates priorities, humans, and cross-team sequencing
+2. **Workers** do the work and hand off obvious next steps directly
+3. **Reviewer** decides when work is done and routes concrete fixes back to the owner
+4. **Conductor** stays informed without becoming the bottleneck
 
 ## The Reviewer Pattern
 
@@ -63,12 +63,12 @@ tt assign backend "Build the API"
 tt assign frontend "Build the UI"
 ```
 
-### 3. Conductor Requests Review
+### 3. Route Review Directly When Work Is Ready
 
-When `tt status` shows workers are idle:
+When implementation is ready, the next handoff is usually obvious:
 
 ```bash
-tt assign reviewer "Review the API implementation. Check security, error handling, tests. Approve or list what needs fixing."
+tt send reviewer --info "API implementation is ready for review in src/api.rs. Route concrete fixes back to backend and copy conductor if needed."
 ```
 
 ### 4. Reviewer Responds
@@ -77,10 +77,11 @@ The reviewer either:
 - **Approves**: "LGTM, API is solid"
 - **Requests changes**: "Password hashing uses weak algorithm, fix needed"
 
-### 5. Conductor Acts
+### 5. Direct Handoffs First, Conductor for Escalation
 
 - If approved → task is done
-- If changes needed → `tt assign backend "Fix: use bcrypt instead of md5"`
+- If changes are concrete → reviewer sends them directly to the owning worker
+- If priority, staffing, or human judgment is needed → reviewer or worker notifies conductor/supervisor
 
 ## Messages Between Agents
 
@@ -95,7 +96,19 @@ let msg = Message::new(worker_id, reviewer_id, MessageType::Custom {
 channel.send(&msg).await?;
 ```
 
-But for simplicity, the **conductor handles coordination**. Agents don't need to message each other directly—the conductor assigns review tasks when workers are done.
+Direct agent-to-agent messaging should be the default when the next execution handoff is obvious:
+
+- worker -> reviewer when code is ready for review
+- reviewer -> worker when fixes are concrete
+- worker -> worker when file ownership or sequencing is clear
+
+Use `supervisor` / `conductor` when you need:
+
+- human judgment
+- priority changes
+- cross-team sequencing
+- escalation or blockers
+- visibility for the broader town
 
 ## Keeping It Simple
 
@@ -107,11 +120,12 @@ Tinytown deliberately avoids:
 
 Instead:
 
-- ✅ Conductor checks `tt status`
-- ✅ Conductor assigns next task
+- ✅ Agents coordinate directly for obvious next steps
+- ✅ Conductor checks `tt status` and stays informed
 - ✅ Reviewer is the quality gate
+- ✅ Conductor steps in for non-obvious or human decisions
 
-This is explicit and easy to understand. You always know what's happening.
+This keeps execution explicit without routing every routine handoff through one inbox.
 
 ## Comparison with Gastown
 
@@ -123,4 +137,3 @@ This is explicit and easy to understand. You always know what's happening.
 | Complexity | High | Low |
 
 Gastown automates more but is harder to understand. Tinytown is explicit.
-
