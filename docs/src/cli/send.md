@@ -89,8 +89,14 @@ The agent will see this at the start of their next round, before processing regu
 ### Coordination Between Agents
 
 ```bash
-# Developer finishes, notifies reviewer
+# Developer finishes, notifies reviewer directly
 tt send reviewer "Implementation complete. Please review src/auth.rs"
+
+# Reviewer sends concrete fixes straight back to the owner
+tt send backend --query "Review found weak password hashing in src/auth.rs. Switch to bcrypt and reply when ready."
+
+# Keep conductor informed without blocking the handoff
+tt send supervisor --info "Reviewer asked backend to fix password hashing before approval."
 
 # Critical bug found - urgent interrupt
 tt send developer --urgent "Critical: SQL injection in login. Fix immediately."

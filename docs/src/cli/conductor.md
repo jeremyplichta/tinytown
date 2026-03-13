@@ -123,17 +123,18 @@ The conductor always spawns a **reviewer** agent. This creates a simple completi
 ```
 Worker completes task
        ↓
-Conductor assigns review task to reviewer
+Worker or conductor routes review to reviewer
        ↓
-Reviewer checks work → approves or requests changes
+Reviewer checks work → approves or sends concrete fixes to owner
        ↓
-Conductor marks complete or assigns fixes
+Conductor steps in when human judgment or broader coordination is needed
 ```
 
-This keeps it simple:
+This keeps it simple without creating a conductor bottleneck:
 - **Workers** do the work
 - **Reviewer** decides if it's done
-- **Conductor** coordinates everything
+- **Agents** handle obvious next-step handoffs directly
+- **Conductor** handles visibility, escalation, and non-obvious coordination
 
 ## Backlog Pattern
 
@@ -149,6 +150,16 @@ A practical approach:
 - Conductor adds uncertain work to backlog
 - Idle agents review backlog
 - Agents claim role-matching tasks
+
+## Direct Coordination
+
+When the next execution handoff is obvious, prefer direct agent-to-agent messaging:
+
+- worker -> reviewer when implementation is ready
+- reviewer -> worker when fixes are concrete
+- worker -> worker for clear ownership handoffs or unblock checks
+
+Keep the conductor in the loop with `tt send supervisor --info ...` when a human should stay informed, but do not force routine execution routing through the conductor.
 
 ## The Conductor's Context
 
@@ -172,13 +183,13 @@ You are the **conductor** of Tinytown "my-project"...
 - tt status - Check progress
 
 ## The Reviewer Pattern
-Always spawn a reviewer. They decide when work is done.
+Always spawn a reviewer. They decide when work is done, but they should route concrete feedback directly to the owning worker whenever possible.
 
 ## Your Role
 1. Break down user requests into tasks
 2. Spawn workers + reviewer
-3. Assign work, then assign review
-4. Coordinate until reviewer approves
+3. Assign initial work and keep direct handoffs flowing
+4. Step in for human decisions, priority changes, escalation, or broader sequencing
 5. Save state with `tt sync pull`, suggest git commit
 ```
 
