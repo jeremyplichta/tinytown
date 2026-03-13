@@ -2423,7 +2423,15 @@ async fn main() -> Result<()> {
                         }
 
                         if shown == 0 {
-                            info!("    • (no actionable messages in sampled inbox)");
+                            for msg in messages.iter().take(3) {
+                                let summary = describe_message(town.channel(), &msg.msg_type).await;
+                                info!(
+                                    "    • {} {}",
+                                    inbox_preview_prefix(&msg.msg_type),
+                                    truncate_summary(&summary, 90)
+                                );
+                                shown += 1;
+                            }
                         }
 
                         if inbox_len > shown {
@@ -2470,7 +2478,15 @@ async fn main() -> Result<()> {
                         }
 
                         if shown == 0 {
-                            info!("    • (no actionable messages in sampled inbox)");
+                            for msg in messages.iter().take(3) {
+                                let summary = describe_message(town.channel(), &msg.msg_type).await;
+                                info!(
+                                    "    • {} {}",
+                                    inbox_preview_prefix(&msg.msg_type),
+                                    truncate_summary(&summary, 90)
+                                );
+                                shown += 1;
+                            }
                         }
 
                         if inbox_len > shown {
@@ -4779,6 +4795,7 @@ mod tests {
         assert!(is_supervisor_alias("Conductor"));
         assert!(validate_spawn_agent_name("supervisor").is_err());
         assert!(validate_spawn_agent_name("conductor").is_err());
+        assert!(validate_spawn_agent_name("supervisor-2").is_ok());
         assert!(validate_spawn_agent_name("backend").is_ok());
     }
 }

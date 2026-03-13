@@ -145,6 +145,25 @@ async fn test_supervisor_aliases_resolve_without_spawned_agent()
     Ok(())
 }
 
+/// Test that reserved supervisor/conductor mailbox names cannot be spawned as agents.
+#[tokio::test]
+async fn test_reserved_supervisor_names_cannot_be_spawned() -> Result<(), Box<dyn std::error::Error>>
+{
+    let town = create_test_town("supervisor-reserved-name-test").await?;
+
+    assert!(matches!(
+        town.spawn_agent("supervisor", "claude").await,
+        Err(tinytown::Error::Config(_))
+    ));
+    assert!(matches!(
+        town.spawn_agent("conductor", "claude").await,
+        Err(tinytown::Error::Config(_))
+    ));
+    assert!(town.spawn_agent("conductor-helper", "claude").await.is_ok());
+
+    Ok(())
+}
+
 // ============================================================================
 // AGENT CREATION AND STATE MANAGEMENT TESTS
 // ============================================================================
