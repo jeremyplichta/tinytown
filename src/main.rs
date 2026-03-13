@@ -107,6 +107,62 @@ async fn sampled_inbox(
     Ok((inbox_len, messages, breakdown))
 }
 
+async fn print_all_inbox_section(
+    channel: &tinytown::Channel,
+    heading: &str,
+    inbox_len: usize,
+    messages: &[tinytown::Message],
+    breakdown: MessageBreakdown,
+) {
+    info!("  {}:", heading);
+    info!(
+        "    [T] {} tasks requiring action",
+        breakdown.tasks + breakdown.other_actionable
+    );
+    info!("    [Q] {} queries awaiting response", breakdown.queries);
+    info!("    [I] {} informational", breakdown.informational);
+    info!("    [C] {} confirmations", breakdown.confirmations);
+
+    let mut shown = 0;
+    for msg in messages {
+        if !matches!(
+            classify_message(&msg.msg_type),
+            MessageCategory::Task | MessageCategory::Query | MessageCategory::OtherActionable
+        ) {
+            continue;
+        }
+        if shown >= 5 {
+            break;
+        }
+
+        let summary = describe_message(channel, &msg.msg_type).await;
+        info!(
+            "    • {} {}",
+            inbox_preview_prefix(&msg.msg_type),
+            truncate_summary(&summary, 90)
+        );
+        shown += 1;
+    }
+
+    if shown == 0 {
+        for msg in messages.iter().take(3) {
+            let summary = describe_message(channel, &msg.msg_type).await;
+            info!(
+                "    • {} {}",
+                inbox_preview_prefix(&msg.msg_type),
+                truncate_summary(&summary, 90)
+            );
+            shown += 1;
+        }
+    }
+
+    if inbox_len > shown {
+        info!("    …plus {} more message(s)", inbox_len - shown);
+    }
+
+    info!("");
+}
+
 async fn track_current_task_for_round(
     channel: &tinytown::Channel,
     agent_id: tinytown::AgentId,
@@ -2390,111 +2446,30 @@ async fn main() -> Result<()> {
                         }
 
                         printed_any = true;
-                        info!("  {} ({:?}):", agent.name, agent.state);
-                        info!(
-                            "    [T] {} tasks requiring action",
-                            breakdown.tasks + breakdown.other_actionable
-                        );
-                        info!("    [Q] {} queries awaiting response", breakdown.queries);
-                        info!("    [I] {} informational", breakdown.informational);
-                        info!("    [C] {} confirmations", breakdown.confirmations);
-
-                        let mut shown = 0;
-                        for msg in &messages {
-                            if !matches!(
-                                classify_message(&msg.msg_type),
-                                MessageCategory::Task
-                                    | MessageCategory::Query
-                                    | MessageCategory::OtherActionable
-                            ) {
-                                continue;
-                            }
-                            if shown >= 5 {
-                                break;
-                            }
-
-                            let summary = describe_message(town.channel(), &msg.msg_type).await;
-                            info!(
-                                "    • {} {}",
-                                inbox_preview_prefix(&msg.msg_type),
-                                truncate_summary(&summary, 90)
-                            );
-                            shown += 1;
-                        }
-
-                        if shown == 0 {
-                            for msg in messages.iter().take(3) {
-                                let summary = describe_message(town.channel(), &msg.msg_type).await;
-                                info!(
-                                    "    • {} {}",
-                                    inbox_preview_prefix(&msg.msg_type),
-                                    truncate_summary(&summary, 90)
-                                );
-                                shown += 1;
-                            }
-                        }
-
-                        if inbox_len > shown {
-                            info!("    …plus {} more message(s)", inbox_len - shown);
-                        }
-
+                        let heading = format!("{} ({:?})", agent.name, agent.state);
+                        print_all_inbox_section(
+                            town.channel(),
+                            &heading,
+                            inbox_len,
+                            &messages,
+                            breakdown,
+                        )
+                        .await;
                         total_actionable += breakdown.actionable_count();
-                        info!("");
                     }
 
                     if supervisor_inbox.0 > 0 {
                         printed_any = true;
                         let (inbox_len, messages, breakdown) = supervisor_inbox;
-                        info!("  supervisor/conductor (well-known mailbox):");
-                        info!(
-                            "    [T] {} tasks requiring action",
-                            breakdown.tasks + breakdown.other_actionable
-                        );
-                        info!("    [Q] {} queries awaiting response", breakdown.queries);
-                        info!("    [I] {} informational", breakdown.informational);
-                        info!("    [C] {} confirmations", breakdown.confirmations);
-
-                        let mut shown = 0;
-                        for msg in &messages {
-                            if !matches!(
-                                classify_message(&msg.msg_type),
-                                MessageCategory::Task
-                                    | MessageCategory::Query
-                                    | MessageCategory::OtherActionable
-                            ) {
-                                continue;
-                            }
-                            if shown >= 5 {
-                                break;
-                            }
-
-                            let summary = describe_message(town.channel(), &msg.msg_type).await;
-                            info!(
-                                "    • {} {}",
-                                inbox_preview_prefix(&msg.msg_type),
-                                truncate_summary(&summary, 90)
-                            );
-                            shown += 1;
-                        }
-
-                        if shown == 0 {
-                            for msg in messages.iter().take(3) {
-                                let summary = describe_message(town.channel(), &msg.msg_type).await;
-                                info!(
-                                    "    • {} {}",
-                                    inbox_preview_prefix(&msg.msg_type),
-                                    truncate_summary(&summary, 90)
-                                );
-                                shown += 1;
-                            }
-                        }
-
-                        if inbox_len > shown {
-                            info!("    …plus {} more message(s)", inbox_len - shown);
-                        }
-
+                        print_all_inbox_section(
+                            town.channel(),
+                            "supervisor/conductor (well-known mailbox)",
+                            inbox_len,
+                            &messages,
+                            breakdown,
+                        )
+                        .await;
                         total_actionable += breakdown.actionable_count();
-                        info!("");
                     }
 
                     if !printed_any {
