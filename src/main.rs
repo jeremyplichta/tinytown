@@ -1844,7 +1844,7 @@ async fn main() -> Result<()> {
                                 );
                             } else {
                                 info!(
-                                    "   Mission sync: work item recorded but still awaiting reviewer approval"
+                                    "   Mission sync: reviewer approval is still required before the work item can be completed"
                                 );
                             }
                         }
@@ -4049,8 +4049,7 @@ fn parse_issue_ref(
 #[derive(serde::Deserialize)]
 struct GitHubIssueView {
     title: String,
-    #[serde(default)]
-    body: String,
+    body: Option<String>,
 }
 
 fn fetch_issue_view(
@@ -4120,7 +4119,7 @@ fn build_mission_work_items(
                     .as_ref()
                     .map(|data| data.title.clone())
                     .unwrap_or_else(|| format!("Issue #{}", number));
-                let body = issue.map(|data| data.body).unwrap_or_default();
+                let body = issue.and_then(|data| data.body).unwrap_or_default();
                 parsed_issues.push(compiler.parse_issue(
                     *number,
                     title,
